@@ -1,0 +1,14 @@
+[Unit]
+Description=Bluetooth audio device autoconnect watcher
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/bt-audio-gateway/bt-audio-gateway.env
+ExecStart=/opt/bt-audio-gateway/current/bin/bt-audio-watch
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

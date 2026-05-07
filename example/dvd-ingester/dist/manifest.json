@@ -1,0 +1,8 @@
+{
+  "project": "dvd-ingester",
+  "version": "0.1.0",
+  "artifact": "dvd-ingester-0.1.0.tar.gz",
+  "artifact_url": "https://github.com/<owner>/<repo>/releases/download/v0.1.0/dvd-ingester-0.1.0.tar.gz",
+  "sha256": "bec489368ab57cc365611615b0215ee2a8ec8a84cfc69e431a68f57370da4008",
+  "installer": "install.sh"
+}

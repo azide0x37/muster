@@ -1,0 +1,30 @@
+schema: 1
+framework: Muster
+project:
+  name: dvd-ingester
+  type: linux-service-appliance
+  version_file: VERSION
+  config_dir: /etc/dvd-ingester
+  install_dir: /opt/dvd-ingester
+  current_link: /opt/dvd-ingester/current
+  release_dir: /opt/dvd-ingester/releases
+architecture:
+  summary: udev triggers a systemd one-shot rip service that fingerprints DVDs, stages local work, atomically publishes to NAS, records success, and ejects.
+  trigger_leg: udev SYSTEMD_WANTS
+  lifecycle_leg: systemd one-shot service
+  local_work_leg: /var/lib/dvd-ingester/work
+  final_storage_leg: NAS mount
+lifecycle:
+  manager: systemd
+  update_polling: systemd-timer
+  health_check: bin/doctor.sh
+python:
+  allowed: when title selection or metadata handling becomes structurally worse in shell
+  required_tool: uv
+release:
+  artifact_prefix: dvd-ingester
+  manifest: manifest.json
+  checksum: sha256
+compliance:
+  readme_self_certification_required: true
+  tests_required: true

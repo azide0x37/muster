@@ -1,0 +1,8 @@
+{
+  "project": "bt-audio-gateway",
+  "version": "0.1.0",
+  "artifact": "bt-audio-gateway-0.1.0.tar.gz",
+  "artifact_url": "https://github.com/<owner>/<repo>/releases/download/v0.1.0/bt-audio-gateway-0.1.0.tar.gz",
+  "sha256": "6b7d35d6536955369a2d54045ed781e4dd73ddcd7b45fcdf1234f03cfe90ddc5",
+  "installer": "install.sh"
+}
