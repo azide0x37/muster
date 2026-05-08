@@ -26,9 +26,10 @@ render-units:
 package: clean
 	mkdir -p "$(PACKAGE_ROOT)"
 	cp -R AGENTS.md CODEX_TASK.md MUSTER.md README.md RELEASE.md SECURITY.md VERSION muster.yaml bin etc src systemd udev tests "$(PACKAGE_ROOT)/"
+	cp src/dvd-rip-one "$(PACKAGE_ROOT)/bin/"
 	find "$(PACKAGE_ROOT)" -type f -name '*.sh' -exec chmod 0755 {} \;
-	chmod 0755 "$(PACKAGE_ROOT)/src/dvd-rip-one"
-	tar -C "$(DIST)" -czf "$(TARBALL)" "$(PROJECT)-$(VERSION)"
+	chmod 0755 "$(PACKAGE_ROOT)/src/dvd-rip-one" "$(PACKAGE_ROOT)/bin/dvd-rip-one"
+	COPYFILE_DISABLE=1 tar --no-xattrs -C "$(DIST)" -czf "$(TARBALL)" "$(PROJECT)-$(VERSION)"
 	if command -v sha256sum >/dev/null 2>&1; then sha256sum "$(TARBALL)" | awk '{print $$1}' > "$(TARBALL).sha256"; else shasum -a 256 "$(TARBALL)" | awk '{print $$1}' > "$(TARBALL).sha256"; fi
 	cp bin/install.sh "$(DIST)/install.sh"
 	chmod 0755 "$(DIST)/install.sh"

@@ -47,10 +47,15 @@ BASE_DIR=/var/lib/dvd-ingester
 WORK_DIR=/var/lib/dvd-ingester/work
 LOG_DIR=/var/lib/dvd-ingester/logs
 RIPPED_DB=/var/lib/dvd-ingester/ripped.jsonl
-DEST_DIR=/mnt/nas/DVD-Rips
+DEST_DIR=/mnt/nas/DVD_Rips
 RIP_MODE=movie
 HANDBRAKE_PRESET='Fast 480p30'
 MIN_TV_TITLE_SECONDS=1080
+MEDIA_SETTLE_SECONDS=8
+MEDIA_READY_TIMEOUT=60
+MEDIA_READY_INTERVAL=2
+EJECT_ON_SUCCESS=1
+EJECT_ON_FAILURE=0
 AUTOUPDATE=1
 UPDATE_CHANNEL=latest
 UPDATE_MANIFEST_URL='https://github.com/azide0x37/dvd-ingester/releases/latest/download/manifest.json'
@@ -85,6 +90,14 @@ Inspect device properties before tightening matches:
 
 ```sh
 udevadm info --query=property --name=/dev/sr0
+```
+
+Inspect rip and probe logs:
+
+```sh
+sudo journalctl -u 'dvd-rip@sr0.service' -n 100 --no-pager
+sudo ls -lt /var/lib/dvd-ingester/logs
+sudo tail -n 80 /var/lib/dvd-ingester/logs/*.log
 ```
 
 ## Update And Rollback

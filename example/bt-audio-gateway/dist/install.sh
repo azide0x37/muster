@@ -133,6 +133,7 @@ switch_current() {
   mkdir -p "$INSTALL_DIR/releases"
   rm -f "$CURRENT_LINK.next"
   ln -s "releases/$VERSION" "$CURRENT_LINK.next"
+  rm -f "$CURRENT_LINK"
   mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
 }
 

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source /etc/bt-audio-gateway/bt-audio-gateway.env
+
+log() {
+  echo "$*" | systemd-cat -t bt-audio-watch
+}
+
+bluetoothctl power on >/dev/null 2>&1 || true
+bluetoothctl agent on >/dev/null 2>&1 || true
+bluetoothctl default-agent >/dev/null 2>&1 || true
+bluetoothctl trust "$BT_MAC" >/dev/null 2>&1 || true
+
+while true; do
+  INFO="$(bluetoothctl info "$BT_MAC" 2>/dev/null || true)"
+
+  if grep -q "Connected: yes" <<< "$INFO"; then
+    /opt/bt-audio-gateway/current/bin/bt-audio-route >/dev/null 2>&1 || true
+    sleep "${SLEEP_SECONDS:-8}"
+    continue
+  fi
+
+  log "Bluetooth device not connected. Scanning for $BT_MAC"
+  bluetoothctl --timeout "${SCAN_SECONDS:-12}" scan on >/dev/null 2>&1 || true
+
+  if bluetoothctl devices | grep -qi "$BT_MAC"; then
+    log "Device discovered. Connecting to $BT_MAC"
+    bluetoothctl connect "$BT_MAC" >/dev/null 2>&1 || true
+    sleep 3
+    /opt/bt-audio-gateway/current/bin/bt-audio-route >/dev/null 2>&1 || true
+  fi
+
+  sleep "${SLEEP_SECONDS:-8}"
+done

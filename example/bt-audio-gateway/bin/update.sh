@@ -85,6 +85,7 @@ tar -xzf "$TMP_DIR/artifact.tar.gz" -C "$RELEASES_DIR/$NEW_VERSION" --strip-comp
 
 rm -f "$CURRENT_LINK.next"
 ln -s "releases/$NEW_VERSION" "$CURRENT_LINK.next"
+rm -f "$CURRENT_LINK"
 mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
 
 if [ -z "$ROOT" ] && command -v systemctl >/dev/null 2>&1; then
@@ -98,6 +99,7 @@ if ! "$CURRENT_LINK/bin/doctor.sh"; then
   if [ -n "$PREVIOUS_TARGET" ]; then
     rm -f "$CURRENT_LINK.next"
     ln -s "$PREVIOUS_TARGET" "$CURRENT_LINK.next"
+    rm -f "$CURRENT_LINK"
     mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
     if [ -z "$ROOT" ] && command -v systemctl >/dev/null 2>&1; then
       systemctl restart bt-audio-watch.service || true

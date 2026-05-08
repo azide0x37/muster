@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source /etc/bt-audio-gateway/bt-audio-gateway.env
+
+UID_NUM="$(id -u "$AUDIO_USER")"
+MAC_UNDERSCORE="${BT_MAC//:/_}"
+
+run_audio() {
+  sudo -u "$AUDIO_USER" \
+    XDG_RUNTIME_DIR="/run/user/$UID_NUM" \
+    PULSE_SERVER="unix:/run/user/$UID_NUM/pulse/native" \
+    "$@"
+}
+
+for _ in $(seq 1 25); do
+  CARD="$(
+    run_audio pactl list short cards 2>/dev/null \
+      | awk -v m="$MAC_UNDERSCORE" '$2 ~ "bluez_card\\." m {print $2; exit}'
+  )"
+
+  if [ -n "${CARD:-}" ]; then
+    run_audio pactl set-card-profile "$CARD" a2dp-sink >/dev/null 2>&1 || true
+  fi
+
+  SINK="$(
+    run_audio pactl list short sinks 2>/dev/null \
+      | awk -v m="$MAC_UNDERSCORE" '$2 ~ "bluez_output\\." m {print $2; exit}'
+  )"
+
+  if [ -n "${SINK:-}" ]; then
+    run_audio pactl set-default-sink "$SINK"
+    run_audio pactl set-sink-volume "$SINK" "${BT_VOLUME:-80%}" || true
+    echo "$SINK"
+    exit 0
+  fi
+
+  sleep 1
+done
+
+echo "No PipeWire/Pulse sink found for $BT_MAC" >&2
+exit 1

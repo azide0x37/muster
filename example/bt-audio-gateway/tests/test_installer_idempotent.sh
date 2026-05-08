@@ -14,5 +14,9 @@ MUSTER_ROOT="$ROOT" MUSTER_SKIP_PACKAGES=1 ./bin/install.sh
 
 grep -q "user retained setting" "$CONFIG"
 test -L "$ROOT/opt/bt-audio-gateway/current"
+test "$(readlink "$ROOT/opt/bt-audio-gateway/current")" = "releases/$(cat VERSION)"
+test ! -e "$ROOT/opt/bt-audio-gateway/releases/$(cat VERSION)/current.next"
 test -x "$ROOT/opt/bt-audio-gateway/current/bin/doctor.sh"
+test -x "$ROOT/opt/bt-audio-gateway/current/bin/bt-audio-watch"
+test -x "$ROOT/opt/bt-audio-gateway/current/bin/bt-audio-route"
 test -f "$ROOT/etc/systemd/system/bt-audio-watch.service"

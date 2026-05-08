@@ -1,8 +1,8 @@
 {
   "project": "bt-audio-gateway",
-  "version": "0.1.0",
-  "artifact": "bt-audio-gateway-0.1.0.tar.gz",
-  "artifact_url": "https://github.com/azide0x37/bt-audio-gateway/releases/download/v0.1.0/bt-audio-gateway-0.1.0.tar.gz",
-  "sha256": "0c5d690f1ba9cd4b8c286025db530154c8cfab04c892eaaff64f12758c3560e1",
+  "version": "0.1.4",
+  "artifact": "bt-audio-gateway-0.1.4.tar.gz",
+  "artifact_url": "https://github.com/azide0x37/bt-audio-gateway/releases/download/v0.1.4/bt-audio-gateway-0.1.4.tar.gz",
+  "sha256": "5c33520598672845cdfd6f572226e11af5df4e188a842f537e05c48a9abc6333",
   "installer": "install.sh"
 }
