@@ -20,6 +20,8 @@ MEDIA_READY_TIMEOUT="${MEDIA_READY_TIMEOUT:-60}"
 MEDIA_READY_INTERVAL="${MEDIA_READY_INTERVAL:-2}"
 EJECT_ON_SUCCESS="${EJECT_ON_SUCCESS:-1}"
 EJECT_ON_FAILURE="${EJECT_ON_FAILURE:-0}"
+RSYNC_RETRIES="${RSYNC_RETRIES:-3}"
+RSYNC_RETRY_SLEEP="${RSYNC_RETRY_SLEEP:-30}"
 LOCK="/run/dvd-ingester.lock"
 LOG_FILE=""
 
@@ -53,6 +55,31 @@ run_logged() {
   rc=$?
   log "Command failed with exit $rc: $*"
   log_tail
+  return "$rc"
+}
+
+rsync_publish() {
+  source_path="$1"
+  destination_path="$2"
+  attempt=1
+  rc=1
+
+  while [ "$attempt" -le "$RSYNC_RETRIES" ]; do
+    append_log "rsync publish attempt $attempt/$RSYNC_RETRIES: $source_path -> $destination_path"
+    if rsync -a --delete --partial --partial-dir=.rsync-partial --append-verify "$source_path" "$destination_path" >> "$LOG_FILE" 2>&1; then
+      return 0
+    fi
+
+    rc=$?
+    log "rsync publish failed with exit $rc on attempt $attempt/$RSYNC_RETRIES"
+    log_tail
+    if [ "$attempt" -lt "$RSYNC_RETRIES" ]; then
+      append_log "sleeping ${RSYNC_RETRY_SLEEP}s before rsync retry"
+      sleep "$RSYNC_RETRY_SLEEP"
+    fi
+    attempt=$((attempt + 1))
+  done
+
   return "$rc"
 }
 
@@ -173,7 +200,7 @@ case "$RIP_MODE" in
       --format av_mkv \
       --output "$RUN_DIR/output.mkv"
 
-    rsync --partial --inplace "$RUN_DIR/output.mkv" "$PART"
+    rsync_publish "$RUN_DIR/output.mkv" "$PART"
     mv "$PART" "$FINAL"
     ;;
   archive)
@@ -188,7 +215,7 @@ case "$RIP_MODE" in
 
     run_logged dvdbackup -M -i "$DEV" -o "$RUN_DIR"
     append_log "publishing archive to $PART"
-    rsync -a --delete "$RUN_DIR"/ "$PART"/
+    rsync_publish "$RUN_DIR"/ "$PART"/
     mv "$PART" "$FINAL"
     ;;
   tv)
