@@ -22,6 +22,7 @@ EJECT_ON_SUCCESS="${EJECT_ON_SUCCESS:-1}"
 EJECT_ON_FAILURE="${EJECT_ON_FAILURE:-0}"
 RSYNC_RETRIES="${RSYNC_RETRIES:-3}"
 RSYNC_RETRY_SLEEP="${RSYNC_RETRY_SLEEP:-30}"
+REQUIRE_DEST_MOUNT="${REQUIRE_DEST_MOUNT:-1}"
 LOCK="/run/dvd-ingester.lock"
 LOG_FILE=""
 
@@ -83,6 +84,23 @@ rsync_publish() {
   return "$rc"
 }
 
+ensure_destination_ready() {
+  if [ "$REQUIRE_DEST_MOUNT" = "1" ]; then
+    if [ -d "$DEST_DIR" ]; then
+      ls -la "$DEST_DIR" >/dev/null 2>&1 || true
+    fi
+
+    if ! findmnt "$DEST_DIR" >/dev/null 2>&1; then
+      log "Destination is not mounted at $DEST_DIR; refusing to write to local storage"
+      append_log "destination is not mounted at $DEST_DIR"
+      return 1
+    fi
+    return 0
+  fi
+
+  mkdir -p "$DEST_DIR"
+}
+
 safe_name() {
   tr -cd 'A-Za-z0-9._ -' | tr ' ' '_' | cut -c1-80
 }
@@ -128,13 +146,14 @@ exec 9>"$LOCK"
 flock -n 9 || exit 0
 trap finish EXIT
 
-mkdir -p "$WORK_DIR" "$LOG_DIR" "$DEST_DIR"
+mkdir -p "$WORK_DIR" "$LOG_DIR"
 touch "$RIPPED_DB"
 
 PROBE_LOG_FILE="$LOG_DIR/probe-${DEV##*/}.log"
 LOG_FILE="$PROBE_LOG_FILE"
 : > "$LOG_FILE"
 
+ensure_destination_ready
 wait_for_media
 
 LABEL="$(blkid -o value -s LABEL "$DEV" 2>/dev/null || true)"
