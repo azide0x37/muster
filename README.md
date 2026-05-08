@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/brand/muster-logo-wordmark.png" alt="Muster" width="720">
+</p>
+
 # Muster
 
 Muster is a repo scaffold framework for small Linux service appliances.
@@ -6,7 +10,7 @@ It turns a prose architecture into a boring, installable, updateable, health-che
 
 Muster is for the kind of project that starts as:
 
-> I just need a Raspberry Pi to watch for X, run Y, publish Z, and restart itself when the room-temperature demon eats Bluetooth again.
+> I just need a Raspberry Pi to watch for X, run Y, publish Z, and restart itself when Bluetooth flakes out again.
 
 That sort of project is easy to prototype and weirdly easy to trust too soon. A shell script becomes a service. A service becomes infrastructure. Infrastructure becomes the thing you forgot was holding up the shed.
 
@@ -121,6 +125,14 @@ The exact service code changes by project. The operational skeleton does not.
 - `example/dvd-ingester`: DVD insert to local ingest to atomic NAS publish.
 
 Each example is a self-contained `impl muster` project with its own installer, updater, doctor, tests, release artifacts, and README self-certification.
+
+## Brand Assets
+
+Brand assets live in `assets/brand/`:
+
+- `muster-logo-wordmark.png`: primary README/header asset.
+- `muster-logo.png`: square icon mark.
+- `muster-wordmark.png`: horizontal wordmark.
 
 ## Use Muster In A Fresh Repo
 
