@@ -1,5 +1,6 @@
 SHELL := /bin/sh
 PROJECT := bt-audio-gateway
+RELEASE_REPO := azide0x37/bt-audio-gateway
 VERSION := $(shell cat VERSION)
 DIST := dist
 PACKAGE_ROOT := $(DIST)/$(PROJECT)-$(VERSION)
@@ -34,7 +35,7 @@ package: clean
 	printf '  "project": "%s",\n' "$(PROJECT)" >> "$(DIST)/manifest.json"
 	printf '  "version": "%s",\n' "$(VERSION)" >> "$(DIST)/manifest.json"
 	printf '  "artifact": "%s",\n' "$(PROJECT)-$(VERSION).tar.gz" >> "$(DIST)/manifest.json"
-	printf '  "artifact_url": "https://github.com/<owner>/<repo>/releases/download/v%s/%s",\n' "$(VERSION)" "$(PROJECT)-$(VERSION).tar.gz" >> "$(DIST)/manifest.json"
+	printf '  "artifact_url": "https://github.com/%s/releases/download/v%s/%s",\n' "$(RELEASE_REPO)" "$(VERSION)" "$(PROJECT)-$(VERSION).tar.gz" >> "$(DIST)/manifest.json"
 	printf '  "sha256": "%s",\n' "$$(cat "$(TARBALL).sha256")" >> "$(DIST)/manifest.json"
 	printf '  "installer": "install.sh"\n' >> "$(DIST)/manifest.json"
 	printf '}\n' >> "$(DIST)/manifest.json"

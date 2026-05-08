@@ -49,7 +49,7 @@ if [ "${AUTOUPDATE:-1}" = "0" ]; then
 fi
 
 MANIFEST_URL="${UPDATE_MANIFEST_URL:-}"
-if [ -z "$MANIFEST_URL" ] || printf '%s' "$MANIFEST_URL" | grep -q '<owner>'; then
+if [ -z "$MANIFEST_URL" ] || printf '%s' "$MANIFEST_URL" | grep -q '[<>]'; then
   log "UPDATE_MANIFEST_URL is not configured for a real release"
   exit 0
 fi

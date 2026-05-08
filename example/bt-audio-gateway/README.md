@@ -19,7 +19,7 @@ Bluetooth is only the local last hop. Snapcast is the network audio transport. P
 Preferred release install:
 
 ```sh
-curl -fsSL https://github.com/<owner>/<repo>/releases/latest/download/install.sh | sudo sh
+curl -fsSL https://github.com/azide0x37/bt-audio-gateway/releases/latest/download/install.sh | sudo sh
 ```
 
 Development install from a checkout:
@@ -59,7 +59,7 @@ SCAN_SECONDS=12
 SLEEP_SECONDS=8
 AUTOUPDATE=1
 UPDATE_CHANNEL=latest
-UPDATE_MANIFEST_URL='https://github.com/<owner>/<repo>/releases/latest/download/manifest.json'
+UPDATE_MANIFEST_URL='https://github.com/azide0x37/bt-audio-gateway/releases/latest/download/manifest.json'
 ```
 
 ## systemd Units

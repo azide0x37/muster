@@ -22,7 +22,7 @@ This appliance is for lawful, non-copy-protected discs or discs your tools can r
 Preferred release install:
 
 ```sh
-curl -fsSL https://github.com/<owner>/<repo>/releases/latest/download/install.sh | sudo sh
+curl -fsSL https://github.com/azide0x37/dvd-ingester/releases/latest/download/install.sh | sudo sh
 ```
 
 Development install from this example:
@@ -53,7 +53,7 @@ HANDBRAKE_PRESET='Fast 480p30'
 MIN_TV_TITLE_SECONDS=1080
 AUTOUPDATE=1
 UPDATE_CHANNEL=latest
-UPDATE_MANIFEST_URL='https://github.com/<owner>/<repo>/releases/latest/download/manifest.json'
+UPDATE_MANIFEST_URL='https://github.com/azide0x37/dvd-ingester/releases/latest/download/manifest.json'
 ```
 
 `RIP_MODE=movie` encodes the main feature to one MKV. `RIP_MODE=archive` uses `dvdbackup -M` locally and atomically publishes the DVD structure. `RIP_MODE=tv` is reserved for a tuned title-duration policy and intentionally fails until implemented for a known library.

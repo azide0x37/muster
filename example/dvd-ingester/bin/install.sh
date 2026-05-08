@@ -11,7 +11,7 @@ SYSTEMD_DIR="$ROOT/etc/systemd/system"
 UDEV_DIR="$ROOT/etc/udev/rules.d"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SRC_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
-DEFAULT_MANIFEST_URL="https://github.com/<owner>/<repo>/releases/latest/download/manifest.json"
+DEFAULT_MANIFEST_URL="https://github.com/azide0x37/dvd-ingester/releases/latest/download/manifest.json"
 TMP_DIR="${TMPDIR:-/tmp}/$PROJECT-install.$$"
 VERSION="${MUSTER_VERSION:-}"
 RELEASE_DIR=""
@@ -53,7 +53,7 @@ prepare_source() {
   fi
 
   MANIFEST_URL="${INSTALL_MANIFEST_URL:-$DEFAULT_MANIFEST_URL}"
-  if printf '%s' "$MANIFEST_URL" | grep -q '<owner>'; then
+  if printf '%s' "$MANIFEST_URL" | grep -q '[<>]'; then
     echo "No checkout files found and INSTALL_MANIFEST_URL is not configured." >&2
     exit 1
   fi
