@@ -81,6 +81,33 @@ UPDATE_MANIFEST_URL='https://github.com/azide0x37/dvd-ingester/releases/latest/d
 
 The udev rule does not run the rip. udev triggers systemd because udev kills long-running work.
 
+## MPL Pattern Mapping
+
+`dvd-ingester` is a concrete instance of [`T2R4.device-triggered-conveyor`](https://github.com/azide0x37/muster-pattern-library/blob/main/patterns/t2/rare/T2R4.device-triggered-conveyor/README.md) from the Muster Pattern Library. This example keeps its project-specific names and installer layout, but the design maps to MPL atoms as follows:
+
+| dvd-ingester behavior | MPL atom | Current evidence |
+|---|---|---|
+| DVD media insertion asks systemd to run one bounded job | `R2.device-binding` and `T2R4.device-triggered-conveyor` | `udev/90-dvd-ingester.rules`, `systemd/dvd-rip@.service` |
+| Destination NAS must be mounted before final writes | `R5.capability-mount` | `REQUIRE_DEST_MOUNT`, `DEST_DIR`, `findmnt` checks |
+| Local work is staged before atomic NAS publish | `T2C1.hot-cold-nas-conveyor` | `WORK_DIR`, `MIN_WORK_FREE_BYTES`, `dvd-publish-one`, `.part` paths, final rename |
+| Periodic health and update work is timer-owned | `C2.persistent-tick`, `T2C3.scheduled-herald` | `dvd-ingester-doctor.timer`, `dvd-ingester-update.timer` |
+| Failed or partial work remains inspectable | `C5.failure-ratchet` | `.rip-in-progress`, `.rip-failed`, `.rip-complete`, per-disc logs |
+| Successful disc identity is retained locally | dvd-ingester-specific ledger | `ripped.jsonl` |
+
+### MPL Migration Plan
+
+This documentation pass does not change runtime behavior, service names, installer behavior, or release semantics.
+
+1. Declare atoms: keep this README, `MUSTER.md`, and `muster.yaml` aligned with the MPL mapping.
+2. Adapter refactor later: wrap the existing DVD scripts with MPL-style states such as `capability_*`, `waiting_for_capacity`, `ready_for_cold_publish`, and explicit handoff metadata.
+3. Full atom rebuild later: evaluate replacing bespoke boundaries with MPL helper scripts and units while preserving DVD fingerprinting, lawful-use scope, rip modes, eject behavior, and the existing update/install layout.
+
+Current gaps against the production-beta MPL contract:
+
+- Low work capacity fails immediately through `MIN_WORK_FREE_BYTES`; it does not yet wait for a drain command or record `waiting_for_capacity`.
+- Destination mount proof exists, but it does not yet write a named capability state file.
+- Async publishing exists, but it is not yet a generic MPL hot/cold handoff contract shared with `T2C1.hot-cold-nas-conveyor`.
+
 ## Manual Test
 
 ```sh
@@ -141,3 +168,4 @@ MUSTER_ROOT="$MUSTER_ROOT" MUSTER_SKIP_PACKAGES=1 ./bin/install.sh
 | doctor check exists | PASS | `bin/doctor.sh` |
 | release artifacts buildable | PASS | `make package` |
 | tests runnable | PASS | `make test` |
+| MPL pattern mapping documented | PASS | `T2R4.device-triggered-conveyor` section above |

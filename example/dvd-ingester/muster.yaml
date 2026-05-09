@@ -18,6 +18,49 @@ lifecycle:
   manager: systemd
   update_polling: systemd-timer
   health_check: bin/doctor.sh
+patterns:
+  source: https://github.com/azide0x37/muster-pattern-library/tree/main
+  primary: T2R4.device-triggered-conveyor
+  required_atoms:
+    - C1.service-capsule
+    - C2.persistent-tick
+    - C4.lazy-resource-gate
+    - C5.failure-ratchet
+    - R2.device-binding
+    - R5.capability-mount
+    - T2C1.hot-cold-nas-conveyor
+    - T2C3.scheduled-herald
+  mapping:
+    device_binding:
+      atom: R2.device-binding
+      evidence:
+        - udev/90-dvd-ingester.rules
+        - systemd/dvd-rip@.service
+    capability_mount:
+      atom: R5.capability-mount
+      evidence:
+        - REQUIRE_DEST_MOUNT
+        - DEST_DIR
+        - findmnt
+    hot_cold_conveyor:
+      atom: T2C1.hot-cold-nas-conveyor
+      evidence:
+        - WORK_DIR
+        - MIN_WORK_FREE_BYTES
+        - src/dvd-publish-one
+    scheduled_work:
+      atoms:
+        - C2.persistent-tick
+        - T2C3.scheduled-herald
+      evidence:
+        - systemd/dvd-ingester-doctor.timer
+        - systemd/dvd-ingester-update.timer
+    failure_state:
+      atom: C5.failure-ratchet
+      evidence:
+        - .rip-in-progress
+        - .rip-failed
+        - .rip-complete
 python:
   allowed: when title selection or metadata handling becomes structurally worse in shell
   required_tool: uv

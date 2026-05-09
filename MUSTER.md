@@ -2,6 +2,8 @@
 
 Muster is a repository scaffold framework for small Linux service appliances generated from prose architecture descriptions. A Muster repo must produce an installable, updateable, auditable service bundle, not just example commands.
 
+Muster coordinates with the [Muster Pattern Library](https://github.com/azide0x37/muster-pattern-library). MPL supplies reusable atoms and composed patterns; this repo supplies the concrete service repository contract. When MPL has a matching atom, a Muster implementation should document that mapping before creating bespoke project vocabulary.
+
 ## Contract
 
 1. systemd owns service lifecycle.
@@ -17,7 +19,20 @@ Muster is a repository scaffold framework for small Linux service appliances gen
 11. Python is allowed only when shell becomes structurally worse for complex state, parsing, APIs, JSON, or orchestration.
 12. If Python is used, the repo uses `uv`, `pyproject.toml`, full typing, and tests.
 13. `README.md` includes a self-certification table with evidence.
-14. Codex may not mark work complete unless tests, release packaging, unit verification where available, and certification docs are current.
+14. `muster.yaml`, `MUSTER.md`, or `README.md` identifies relevant MPL atoms and composed patterns when they exist.
+15. Codex may not mark work complete unless tests, release packaging, unit verification where available, and certification docs are current.
+
+## MPL Pattern Vocabulary
+
+Use MPL default branch names as the live source of truth. Do not freeze generated repos to an older MPL identifier when the library has renamed the pattern.
+
+For device-triggered ingest appliances, use [`T2R4.device-triggered-conveyor`](https://github.com/azide0x37/muster-pattern-library/blob/main/patterns/t2/rare/T2R4.device-triggered-conveyor/README.md). The core atom chain is:
+
+- `R2.device-binding`: udev hands device events to systemd.
+- `R5.capability-mount`: a destination capability is proven before high-volume writes.
+- `T2C1.hot-cold-nas-conveyor`: hot local work moves to cold NAS or network storage with atomic handoff.
+- `C2.persistent-tick` and `T2C3.scheduled-herald`: timers own repeated checks, drains, and status work.
+- `C5.failure-ratchet`: failures leave inspectable state instead of disappearing into logs.
 
 ## Examples
 
@@ -33,4 +48,4 @@ The included `example/dvd-ingester` project implements:
 
 `udev -> systemd one-shot service -> rip script -> local work dir -> atomic NAS publish -> eject`
 
-udev only triggers systemd. systemd owns the long-running rip. The script fingerprints before work, records success locally, writes final files atomically, and leaves Plex, Jellyfin, NAS, or desktop systems to handle later transcoding.
+This is a concrete `T2R4.device-triggered-conveyor` instance. udev only triggers systemd. systemd owns the long-running rip. The script fingerprints before work, records success locally, writes final files atomically, and leaves Plex, Jellyfin, NAS, or desktop systems to handle later transcoding.

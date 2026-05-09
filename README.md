@@ -89,6 +89,18 @@ Muster asks the operational questions before the script escapes the workbench:
 
 The answer is a repo that installs cleanly, explains itself, packages itself, and gives future-you a fighting chance.
 
+## Muster Pattern Library
+
+Muster implementations should be described in terms of the [Muster Pattern Library](https://github.com/azide0x37/muster-pattern-library) when a matching atom or composed pattern exists. This repo owns the service-repo contract; MPL owns the smaller vocabulary for reusable solution shapes.
+
+Use MPL as the first pass vocabulary before inventing a project-specific structure:
+
+- common atoms describe service capsules, timers, lazy resources, failure markers, device bindings, and capabilities
+- composed patterns describe repeatable appliance shapes such as hot/cold NAS conveyors and device-triggered conveyors
+- project repos adapt those atoms to real services, paths, packages, installers, and user-facing docs
+
+For device ingest appliances, the current default pattern is [`T2R4.device-triggered-conveyor`](https://github.com/azide0x37/muster-pattern-library/blob/main/patterns/t2/rare/T2R4.device-triggered-conveyor/README.md). It composes device binding, capability proof, hot-storage backpressure, scheduled drain/status work, and inspectable failure state.
+
 ## What It Produces
 
 Concrete Muster implementations live under `example/<name>/`. A generated implementation should look like this:
@@ -139,8 +151,9 @@ Brand assets live in `assets/brand/`:
 1. Initialize the repository.
 2. Copy `AGENTS.md`, `MUSTER.md`, and `CODEX_TASK.md`.
 3. Paste the project architecture into Codex.
-4. Tell Codex to apply the Muster framework.
-5. Require `make test` and `make package` before declaring the repo complete.
+4. Identify the closest MPL atoms and composed pattern.
+5. Tell Codex to apply the Muster framework using those atoms.
+6. Require `make test` and `make package` before declaring the repo complete.
 
 The implementation should produce systemd units, idempotent installers, staged tests, release artifacts, health checks, autoupdate timers, rollback-aware updates, and README self-certification.
 
@@ -155,6 +168,7 @@ The formal contract lives in [`MUSTER.md`](MUSTER.md). The short version:
 - `/opt/<project>/current` points to the active release.
 - installers are idempotent.
 - updates verify SHA256 and roll back on failed health checks.
+- matching MPL atoms are documented in `muster.yaml`, `MUSTER.md`, or the README.
 - Python is used only when it is clearly superior to shell, and then through `uv`.
 - the README self-certifies compliance.
 

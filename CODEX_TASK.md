@@ -8,6 +8,8 @@ Implement a Muster service repo: an installable, updateable, auditable Linux ser
 
 Muster favors systemd components first. Use typed Python with `uv` only when shell becomes structurally worse for complex state, structured parsing, network APIs, JSON manipulation, or orchestration.
 
+Before inventing a bespoke service shape, identify matching atoms or composed patterns in the [Muster Pattern Library](https://github.com/azide0x37/muster-pattern-library). Use MPL default branch identifiers in docs and `muster.yaml`. For example, device-event ingest appliances should start from `T2R4.device-triggered-conveyor`.
+
 ## Required Repo Shape
 
 Create or update:
@@ -32,16 +34,17 @@ Create or update:
 
 ## Architecture Rules
 
-1. Identify the network leg, local plumbing leg, unreliable local leg, and lifecycle owner.
-2. Keep network transport and local transport separate.
-3. Put config under `/etc/<project>/`.
-4. Put installed code under `/opt/<project>/releases/<version>/`.
-5. Point `/opt/<project>/current` to the active release.
-6. Make systemd units call `/opt/<project>/current/bin/...`.
-7. Add health checks through `doctor.sh`.
-8. Add update polling through a systemd timer.
-9. Make the installer idempotent.
-10. Make the updater verify SHA256 and roll back if `doctor.sh` fails.
+1. Identify the closest MPL atoms and composed pattern before naming project-specific pieces.
+2. Identify the network leg, local plumbing leg, unreliable local leg, and lifecycle owner.
+3. Keep network transport and local transport separate.
+4. Put config under `/etc/<project>/`.
+5. Put installed code under `/opt/<project>/releases/<version>/`.
+6. Point `/opt/<project>/current` to the active release.
+7. Make systemd units call `/opt/<project>/current/bin/...`.
+8. Add health checks through `doctor.sh`.
+9. Add update polling through a systemd timer.
+10. Make the installer idempotent.
+11. Make the updater verify SHA256 and roll back if `doctor.sh` fails.
 
 ## Installer Requirements
 
@@ -81,6 +84,7 @@ Create or update:
 
 - service purpose
 - text architecture diagram
+- MPL pattern mapping when the library has a matching atom or composed pattern
 - install command
 - manual install steps
 - config reference
@@ -100,3 +104,4 @@ Do not declare completion until:
 - installer idempotence is tested
 - README self-certification is current
 - known limitations are listed
+- MPL mapping is current when applicable
