@@ -7,4 +7,5 @@ done
 
 if command -v bash >/dev/null 2>&1; then
   bash -n src/dvd-rip-one
+  bash -n src/dvd-publish-one
 fi

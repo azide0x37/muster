@@ -98,12 +98,12 @@ install_packages() {
 copy_release() {
   mkdir -p "$RELEASE_DIR/bin" "$RELEASE_DIR/systemd" "$RELEASE_DIR/etc" "$RELEASE_DIR/udev" "$RELEASE_DIR/doc"
   cp "$SRC_ROOT"/bin/*.sh "$RELEASE_DIR/bin/"
-  cp "$SRC_ROOT"/src/dvd-rip-one "$RELEASE_DIR/bin/"
+  cp "$SRC_ROOT"/src/dvd-rip-one "$SRC_ROOT"/src/dvd-publish-one "$RELEASE_DIR/bin/"
   cp "$SRC_ROOT"/systemd/* "$RELEASE_DIR/systemd/"
   cp "$SRC_ROOT"/udev/* "$RELEASE_DIR/udev/"
   cp "$SRC_ROOT"/etc/* "$RELEASE_DIR/etc/"
   cp "$SRC_ROOT"/README.md "$SRC_ROOT"/MUSTER.md "$SRC_ROOT"/RELEASE.md "$RELEASE_DIR/doc/"
-  chmod 0755 "$RELEASE_DIR/bin"/*.sh "$RELEASE_DIR/bin/dvd-rip-one"
+  chmod 0755 "$RELEASE_DIR/bin"/*.sh "$RELEASE_DIR/bin/dvd-rip-one" "$RELEASE_DIR/bin/dvd-publish-one"
 }
 
 install_config() {

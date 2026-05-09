@@ -23,8 +23,13 @@ EJECT_ON_FAILURE="${EJECT_ON_FAILURE:-0}"
 RSYNC_RETRIES="${RSYNC_RETRIES:-3}"
 RSYNC_RETRY_SLEEP="${RSYNC_RETRY_SLEEP:-30}"
 REQUIRE_DEST_MOUNT="${REQUIRE_DEST_MOUNT:-1}"
+MIN_WORK_FREE_BYTES="${MIN_WORK_FREE_BYTES:-10737418240}"
+PUBLISH_ASYNC="${PUBLISH_ASYNC:-1}"
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PUBLISH_COMMAND="${PUBLISH_COMMAND:-$SCRIPT_DIR/dvd-publish-one}"
 LOCK="/run/dvd-ingester.lock"
 LOG_FILE=""
+EJECTED=0
 
 log() {
   if command -v systemd-cat >/dev/null 2>&1; then
@@ -47,6 +52,13 @@ log_tail() {
   fi
 }
 
+eject_disc() {
+  if [ "$EJECTED" = "0" ]; then
+    eject "$DEV" >/dev/null 2>&1 || true
+    EJECTED=1
+  fi
+}
+
 run_logged() {
   append_log "running: $*"
   if "$@" >> "$LOG_FILE" 2>&1; then
@@ -56,31 +68,6 @@ run_logged() {
   rc=$?
   log "Command failed with exit $rc: $*"
   log_tail
-  return "$rc"
-}
-
-rsync_publish() {
-  source_path="$1"
-  destination_path="$2"
-  attempt=1
-  rc=1
-
-  while [ "$attempt" -le "$RSYNC_RETRIES" ]; do
-    append_log "rsync publish attempt $attempt/$RSYNC_RETRIES: $source_path -> $destination_path"
-    if rsync -a --delete --partial --partial-dir=.rsync-partial --append-verify "$source_path" "$destination_path" >> "$LOG_FILE" 2>&1; then
-      return 0
-    fi
-
-    rc=$?
-    log "rsync publish failed with exit $rc on attempt $attempt/$RSYNC_RETRIES"
-    log_tail
-    if [ "$attempt" -lt "$RSYNC_RETRIES" ]; then
-      append_log "sleeping ${RSYNC_RETRY_SLEEP}s before rsync retry"
-      sleep "$RSYNC_RETRY_SLEEP"
-    fi
-    attempt=$((attempt + 1))
-  done
-
   return "$rc"
 }
 
@@ -101,6 +88,57 @@ ensure_destination_ready() {
   mkdir -p "$DEST_DIR"
 }
 
+ensure_work_space_available() {
+  available_bytes="$(df -Pk "$WORK_DIR" | awk 'NR == 2 {printf "%.0f\n", $4 * 1024}')"
+  append_log "work filesystem available bytes: $available_bytes"
+
+  if [ "$available_bytes" -lt "$MIN_WORK_FREE_BYTES" ]; then
+    log "Not enough free space on work filesystem: available=${available_bytes} required=${MIN_WORK_FREE_BYTES}"
+    append_log "not enough work filesystem space: available=${available_bytes} required=${MIN_WORK_FREE_BYTES}"
+    return 1
+  fi
+}
+
+write_metadata() {
+  METADATA_FILE="$RUN_DIR/metadata.json"
+  jq -cn \
+    --arg fingerprint "$FP" \
+    --arg disc_label "$LABEL" \
+    --arg mode "$RIP_MODE" \
+    --arg final "$FINAL" \
+    --arg part "$PART" \
+    --arg run_dir "$RUN_DIR" \
+    '{"fingerprint":$fingerprint,"label":$disc_label,"mode":$mode,"final":$final,"part":$part,"run_dir":$run_dir}' \
+    > "$METADATA_FILE"
+}
+
+start_publish() {
+  if [ ! -x "$PUBLISH_COMMAND" ]; then
+    log "Publish command is not executable: $PUBLISH_COMMAND"
+    return 1
+  fi
+
+  if [ "$PUBLISH_ASYNC" = "1" ] && command -v systemd-run >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    unit="dvd-publish-$FP"
+    append_log "starting asynchronous publish unit $unit"
+    if systemd-run \
+      --unit "$unit" \
+      --description "Publish DVD rip $LABEL" \
+      --property=Nice=10 \
+      --property=IOSchedulingClass=best-effort \
+      --property=IOSchedulingPriority=7 \
+      --collect \
+      --no-block \
+      "$PUBLISH_COMMAND" "$METADATA_FILE" >> "$LOG_FILE" 2>&1; then
+      log "Local rip complete for $LABEL; publish continues in $unit"
+      return 0
+    fi
+    append_log "systemd-run publish failed; falling back to foreground publish"
+  fi
+
+  "$PUBLISH_COMMAND" "$METADATA_FILE"
+}
+
 safe_name() {
   tr -cd 'A-Za-z0-9._ -' | tr ' ' '_' | cut -c1-80
 }
@@ -108,7 +146,7 @@ safe_name() {
 finish() {
   status=$?
   if { [ "$status" -eq 0 ] && [ "$EJECT_ON_SUCCESS" = "1" ]; } || { [ "$status" -ne 0 ] && [ "$EJECT_ON_FAILURE" = "1" ]; }; then
-    eject "$DEV" >/dev/null 2>&1 || true
+    eject_disc
   elif [ "$status" -ne 0 ]; then
     log "Leaving $DEV inserted after failure; set EJECT_ON_FAILURE=1 to eject failed discs"
   fi
@@ -154,6 +192,7 @@ LOG_FILE="$PROBE_LOG_FILE"
 : > "$LOG_FILE"
 
 ensure_destination_ready
+ensure_work_space_available
 wait_for_media
 
 LABEL="$(blkid -o value -s LABEL "$DEV" 2>/dev/null || true)"
@@ -219,8 +258,6 @@ case "$RIP_MODE" in
       --format av_mkv \
       --output "$RUN_DIR/output.mkv"
 
-    rsync_publish "$RUN_DIR/output.mkv" "$PART"
-    mv "$PART" "$FINAL"
     ;;
   archive)
     FINAL="$DEST_DIR/${SAFE_LABEL}_${FP}"
@@ -233,9 +270,6 @@ case "$RIP_MODE" in
     fi
 
     run_logged dvdbackup -M -i "$DEV" -o "$RUN_DIR"
-    append_log "publishing archive to $PART"
-    rsync_publish "$RUN_DIR"/ "$PART"/
-    mv "$PART" "$FINAL"
     ;;
   tv)
     echo "RIP_MODE=tv requires a library-specific title-selection policy. MIN_TV_TITLE_SECONDS=$MIN_TV_TITLE_SECONDS" >&2
@@ -247,6 +281,7 @@ case "$RIP_MODE" in
     ;;
 esac
 
-record_success
-rm -rf "$RUN_DIR"
-log "Done: $FINAL"
+write_metadata
+append_log "local rip complete; ejecting before NAS publish"
+eject_disc
+start_publish

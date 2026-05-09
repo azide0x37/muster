@@ -72,10 +72,10 @@ check_runtime() {
   fi
 
   if command -v findmnt >/dev/null 2>&1; then
-    if findmnt -T "$DEST_DIR" >/dev/null 2>&1; then
-      pass "destination path is on a mounted filesystem"
+    if findmnt "$DEST_DIR" >/dev/null 2>&1; then
+      pass "destination path is a mountpoint: $DEST_DIR"
     else
-      fail "destination path is not on a mounted filesystem: $DEST_DIR"
+      fail "destination path is not a mountpoint: $DEST_DIR"
     fi
   fi
 }
