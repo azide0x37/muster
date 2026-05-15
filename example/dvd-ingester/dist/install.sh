@@ -45,19 +45,30 @@ need_root() {
   fi
 }
 
+install_packages() {
+  if [ "${MUSTER_SKIP_PACKAGES:-0}" = "1" ]; then
+    log "Skipping package install because MUSTER_SKIP_PACKAGES=1"
+    return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y \
+      curl ca-certificates \
+      rsync util-linux eject dvdbackup
+  else
+    log "apt-get not found; skipping package install"
+  fi
+}
+
 prepare_source() {
   if [ -f "$SRC_ROOT/muster.yaml" ] && [ -f "$SRC_ROOT/src/dvd-rip-one" ]; then
-    VERSION="${VERSION:-$(cat "$SRC_ROOT/VERSION" 2>/dev/null || echo 0.1.0)}"
+    VERSION="${VERSION:-$(cat "$SRC_ROOT/VERSION" 2>/dev/null || echo 0.4.0)}"
     RELEASE_DIR="$INSTALL_DIR/releases/$VERSION"
     return 0
   fi
 
   MANIFEST_URL="${INSTALL_MANIFEST_URL:-$DEFAULT_MANIFEST_URL}"
-  if printf '%s' "$MANIFEST_URL" | grep -q '[<>]'; then
-    echo "No checkout files found and INSTALL_MANIFEST_URL is not configured." >&2
-    exit 1
-  fi
-
   mkdir -p "$TMP_DIR/src"
   curl -fsSL "$MANIFEST_URL" -o "$TMP_DIR/manifest.json"
   VERSION="${VERSION:-$(json_value version "$TMP_DIR/manifest.json")}"
@@ -81,50 +92,41 @@ prepare_source() {
   RELEASE_DIR="$INSTALL_DIR/releases/$VERSION"
 }
 
-install_packages() {
-  if [ "${MUSTER_SKIP_PACKAGES:-0}" = "1" ]; then
-    log "Skipping package install because MUSTER_SKIP_PACKAGES=1"
-    return 0
-  fi
-
-  if command -v apt-get >/dev/null 2>&1; then
-    apt-get update
-    apt-get install -y handbrake-cli dvdbackup lsdvd dvd+rw-tools jq eject util-linux rsync curl ca-certificates
-  else
-    log "apt-get not found; skipping package install"
-  fi
-}
-
 copy_release() {
-  mkdir -p "$RELEASE_DIR/bin" "$RELEASE_DIR/systemd" "$RELEASE_DIR/etc" "$RELEASE_DIR/udev" "$RELEASE_DIR/doc"
+  mkdir -p "$RELEASE_DIR/bin" "$RELEASE_DIR/src" "$RELEASE_DIR/systemd" "$RELEASE_DIR/udev" "$RELEASE_DIR/etc" "$RELEASE_DIR/doc"
+
   cp "$SRC_ROOT"/bin/*.sh "$RELEASE_DIR/bin/"
-  cp "$SRC_ROOT"/src/dvd-rip-one "$SRC_ROOT"/src/dvd-publish-one "$RELEASE_DIR/bin/"
+  cp "$SRC_ROOT"/src/dvd-rip-one "$RELEASE_DIR/bin/"
+  cp "$SRC_ROOT"/src/dvd-publish-one "$RELEASE_DIR/bin/"
+  cp "$SRC_ROOT"/src/dvd-rip-one "$RELEASE_DIR/src/"
+  cp "$SRC_ROOT"/src/dvd-publish-one "$RELEASE_DIR/src/"
   cp "$SRC_ROOT"/systemd/* "$RELEASE_DIR/systemd/"
   cp "$SRC_ROOT"/udev/* "$RELEASE_DIR/udev/"
   cp "$SRC_ROOT"/etc/* "$RELEASE_DIR/etc/"
-  cp "$SRC_ROOT"/README.md "$SRC_ROOT"/MUSTER.md "$SRC_ROOT"/RELEASE.md "$RELEASE_DIR/doc/"
-  chmod 0755 "$RELEASE_DIR/bin"/*.sh "$RELEASE_DIR/bin/dvd-rip-one" "$RELEASE_DIR/bin/dvd-publish-one"
+  cp "$SRC_ROOT"/muster.yaml "$SRC_ROOT"/VERSION "$RELEASE_DIR/"
+  cp "$SRC_ROOT"/README.md "$SRC_ROOT"/MUSTER.md "$SRC_ROOT"/RELEASE.md "$SRC_ROOT"/SECURITY.md "$RELEASE_DIR/doc/"
+  chmod 0755 "$RELEASE_DIR/bin"/*.sh "$RELEASE_DIR/bin/dvd-rip-one" "$RELEASE_DIR/bin/dvd-publish-one" "$RELEASE_DIR/src/dvd-rip-one" "$RELEASE_DIR/src/dvd-publish-one"
 }
 
 install_config() {
   mkdir -p "$CONFIG_DIR"
   if [ -f "$CONFIG_FILE" ]; then
     log "Preserving existing $CONFIG_FILE"
-  else
-    cp "$SRC_ROOT/etc/$PROJECT.env.example" "$CONFIG_FILE"
-    chmod 0644 "$CONFIG_FILE"
-    log "Installed example config at $CONFIG_FILE"
+    return 0
   fi
 
-  # shellcheck disable=SC1090
-  . "$CONFIG_FILE"
-  mkdir -p "$ROOT${BASE_DIR:-/var/lib/dvd-ingester}" "$ROOT${WORK_DIR:-/var/lib/dvd-ingester/work}" "$ROOT${LOG_DIR:-/var/lib/dvd-ingester/logs}" "$ROOT${DEST_DIR:-/mnt/nas/DVD_Rips}"
-  touch "$ROOT${RIPPED_DB:-/var/lib/dvd-ingester/ripped.jsonl}"
+  cp "$SRC_ROOT/etc/$PROJECT.env.example" "$CONFIG_FILE"
+  chmod 0644 "$CONFIG_FILE"
+  log "Installed example config at $CONFIG_FILE"
 }
 
-install_units_and_udev() {
-  mkdir -p "$SYSTEMD_DIR" "$UDEV_DIR"
+install_units() {
+  mkdir -p "$SYSTEMD_DIR"
   cp "$SRC_ROOT"/systemd/* "$SYSTEMD_DIR/"
+}
+
+install_udev() {
+  mkdir -p "$UDEV_DIR"
   cp "$SRC_ROOT"/udev/* "$UDEV_DIR/"
 }
 
@@ -136,15 +138,19 @@ switch_current() {
   mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
 }
 
-reload_managers() {
+enable_systemd() {
   if [ -n "$ROOT" ]; then
     return 0
   fi
 
-  systemctl daemon-reload
-  systemctl enable --now dvd-ingester-doctor.timer dvd-ingester-update.timer
-  udevadm control --reload-rules
-  udevadm trigger
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload
+    systemctl enable --now dvd-publish-one.timer dvd-ingester-doctor.timer dvd-ingester-update.timer
+  fi
+
+  if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload || true
+  fi
 }
 
 need_root
@@ -152,8 +158,9 @@ prepare_source
 install_packages
 copy_release
 install_config
-install_units_and_udev
+install_units
+install_udev
 switch_current
-reload_managers
+enable_systemd
 
 log "$PROJECT $VERSION installed"

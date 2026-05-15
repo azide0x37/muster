@@ -1,17 +1,14 @@
 [Unit]
-Description=DVD ingest job for /dev/%I
+Description=DVD ingest hot-to-cold publish drain
 Documentation=file:/opt/dvd-ingester/current/doc/README.md
-After=dev-%i.device local-fs.target
-BindsTo=dev-%i.device
+After=local-fs.target
 OnFailure=dvd-ingester-doctor.service
 
 [Service]
 Type=oneshot
 EnvironmentFile=-/etc/dvd-ingester/dvd-ingester.env
-ExecStart=/opt/dvd-ingester/current/bin/dvd-rip-one /dev/%I --apply
-TimeoutStartSec=12h
+ExecStart=/opt/dvd-ingester/current/bin/dvd-publish-one --apply --once
 RuntimeDirectory=dvd-ingester
-StateDirectory=dvd-ingester
 CacheDirectory=dvd-ingester
 Nice=10
 IOSchedulingClass=best-effort
@@ -20,4 +17,4 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/run/dvd-ingester /var/lib/dvd-ingester /var/cache/dvd-ingester /mnt /media
+ReadWritePaths=/run/dvd-ingester /var/cache/dvd-ingester /mnt /media

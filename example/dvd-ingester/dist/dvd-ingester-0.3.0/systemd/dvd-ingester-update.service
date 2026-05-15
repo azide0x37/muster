@@ -1,9 +1,0 @@
-[Unit]
-Description=Update dvd-ingester from release manifest
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-EnvironmentFile=/etc/dvd-ingester/dvd-ingester.env
-ExecStart=/opt/dvd-ingester/current/bin/update.sh
