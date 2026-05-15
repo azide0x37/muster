@@ -79,6 +79,13 @@ write_state() {
     "$state" "$reason" "$DEVICE" "$RUN_ID" "$WORK_DIR" "$HOT_DIR" "$DEST_DIR" > "$STATE_DIR/$file"
 }
 
+write_handoff_state() {
+  state="$1"
+  reason="$2"
+  printf '{"state":"%s","reason":"%s","device":"%s","run_id":"%s","hot_dir":"%s","dest_dir":"%s"}\n' \
+    "$state" "$reason" "$DEVICE" "$RUN_ID" "$HOT_DIR" "$DEST_DIR" > "$STATE_DIR/handoff.json"
+}
+
 cleanup_lock_dir() {
   if [ -n "$LOCK_DIR_TO_REMOVE" ]; then
     rmdir "$LOCK_DIR_TO_REMOVE" 2>/dev/null || true
@@ -202,9 +209,10 @@ wait_for_hot_capacity() {
 }
 
 run_ingest() {
-  export DEVICE RUN_DIR RUN_ID DEVICE_FINGERPRINT DISC_LABEL DISC_UUID DISC_TYPE DISC_SIZE
+  export DEVICE RUN_DIR RUN_ID DEVICE_FINGERPRINT DISC_LABEL DISC_UUID DISC_TYPE DISC_SIZE STATE_DIR WORK_DIR HOT_DIR DEST_DIR
   mkdir -p "$RUN_DIR"
   touch "$RUN_DIR/.ingest-in-progress"
+  write_state rip.json active ingest_in_progress
   printf '{"device":"%s","label":"%s","uuid":"%s","type":"%s","size":"%s","fingerprint":"%s","run_id":"%s"}\n' \
     "$DEVICE" "$DISC_LABEL" "$DISC_UUID" "$DISC_TYPE" "$DISC_SIZE" "$DEVICE_FINGERPRINT" "$RUN_ID" > "$RUN_DIR/metadata.json"
 
@@ -225,6 +233,7 @@ run_ingest() {
 
   rm -f "$RUN_DIR/.ingest-in-progress"
   touch "$RUN_DIR/.ingest-complete"
+  write_state rip.json active ingest_complete
 }
 
 existing_output_path() {
@@ -303,6 +312,7 @@ if existing="$(existing_output_path)"; then
   exit 0
 fi
 
+write_handoff_state waiting_for_extraction ingest_in_progress
 wait_for_hot_capacity
 
 if ! run_ingest; then
@@ -314,6 +324,7 @@ if ! run_ingest; then
 fi
 
 eject_device
+write_state rip.json active handoff_to_hot
 handoff_to_hot
 write_state rip.json healthy ready_for_cold_publish
 

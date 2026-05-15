@@ -14,6 +14,9 @@
   `<disc-title>_<fingerprint>` instead of device/timestamp run names.
 - Eject completed discs before the slower hot/cold handoff so operators can
   swap media without waiting for archive movement.
+- Updated rip and handoff state files at the start of extraction so Home
+  Assistant does not show stale `ready_for_cold_publish` while a new disc is
+  actively ripping.
 
 ## 0.4.0
 

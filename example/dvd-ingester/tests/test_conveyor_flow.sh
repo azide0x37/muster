@@ -15,6 +15,7 @@ MUSTER_MOCK_ROOT="$ROOT" \
   CAPACITY_TIMEOUT_SECONDS=5 \
   CAPACITY_INTERVAL_SECONDS=1 \
   DRAIN_COMMAND="touch '$ROOT/run/dvd-ingester/capacity-ready'" \
+  RIP_COMMAND='grep -q "\"state\":\"active\"" "$STATE_DIR/rip.json"; grep -q "\"reason\":\"ingest_in_progress\"" "$STATE_DIR/rip.json"; printf "mock ingest from %s\n" "$DEVICE" > "$RUN_DIR/payload.txt"' \
   ./src/dvd-rip-one /dev/sr0 >"$ROOT/rip.out"
 
 grep -q 'ok: dvd-ingester staged' "$ROOT/rip.out"
