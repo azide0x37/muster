@@ -287,6 +287,11 @@ first_matching_dir() {
 }
 
 probe_disk_identity() {
+  if command -v udevadm >/dev/null 2>&1; then
+    if udevadm info -q property -n "$DISC_DEVICE" 2>/dev/null | grep -q '^ID_CDROM_MEDIA=1$'; then
+      return 0
+    fi
+  fi
   if command -v blkid >/dev/null 2>&1; then
     if command -v timeout >/dev/null 2>&1; then
       timeout "$DISK_PROBE_TIMEOUT_SECONDS" blkid "$DISC_DEVICE" >/dev/null 2>&1
@@ -417,6 +422,9 @@ publish_state=$(field_from_json state "$STATE_DIR/publish.json" unknown)
 published_count=$(number_from_json published "$STATE_DIR/publish.json" 0)
 failed_count=$(number_from_json failed "$STATE_DIR/publish.json" 0)
 conveyance_status=$(field_from_json state "$STATE_DIR/handoff.json" "$publish_state")
+if [ "$rip_state" = "active" ] || [ "$rip_state" = "activating" ]; then
+  conveyance_status=waiting_for_extraction
+fi
 version=$(cat "$VERSION_FILE" 2>/dev/null || printf '%s\n' unknown)
 enabled=ON
 if [ -f "$STATE_DIR/disabled" ]; then
@@ -440,7 +448,7 @@ work_dir_items=$(folder_item_count "$WORK_DIR" 0)
 hot_dir_items=$(folder_item_count "$HOT_DIR" 0)
 work_dir_bytes=$(folder_bytes "$WORK_DIR")
 hot_dir_bytes=$(folder_bytes "$HOT_DIR")
-nas_dir_bytes=$(folder_bytes "$DEST_DIR")
+nas_dir_bytes="$nas_used"
 work_entries=$(folder_entries_json "$WORK_DIR" 0 "$HA_FOLDER_INDEX_LIMIT")
 hot_entries=$(folder_entries_json "$HOT_DIR" 0 "$HA_FOLDER_INDEX_LIMIT")
 nas_entries=$(folder_entries_json "$DEST_DIR" 1 "$HA_FOLDER_INDEX_LIMIT")

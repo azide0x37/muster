@@ -1,5 +1,16 @@
 # dvd-ingester Release Notes
 
+## 1.0.2
+
+- Avoid recursive NAS size scans in the Home Assistant MQTT bridge so slow NAS
+  reads do not make the one-minute telemetry refresh time out and leave stale
+  retained MQTT state in Home Assistant.
+- Detect loaded optical media from udev `ID_CDROM_MEDIA=1` before falling back
+  to filesystem probing, making the disk state sensor more accurate while a
+  newly inserted disc is being claimed by udev/systemd.
+- Report conveyance as `waiting_for_extraction` while an extraction is active
+  so bridge snapshots do not mix a new rip state with an older publish handoff.
+
 ## 1.0.1
 
 - Removed the rip service's device lifetime binding so ejecting a completed
