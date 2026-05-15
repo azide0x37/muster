@@ -1,5 +1,15 @@
 # dvd-ingester Release Notes
 
+## 1.0.1
+
+- Removed the rip service's device lifetime binding so ejecting a completed
+  disc does not cause systemd to terminate the post-rip hot handoff.
+- Made the hot handoff publish-safe by copying completed rips into hidden
+  `.incoming-*` hot directories and writing `.ingest-complete` only after the
+  handoff copy is complete.
+- Clean up interrupted hidden hot handoff directories while preserving the
+  completed work source until the visible hot handoff succeeds.
+
 ## 1.0.0
 
 - Added Home Assistant MQTT discovery and state publishing through
@@ -26,11 +36,6 @@
   sensors. Extraction progress compares current run bytes with disc size;
   conveyance progress compares active incoming publish bytes with hot source
   size.
-- Removed the rip service's device lifetime binding so ejecting a completed
-  disc does not cause systemd to terminate the post-rip hot handoff.
-- Made the hot handoff publish-safe by copying completed rips into hidden
-  `.incoming-*` hot directories and writing `.ingest-complete` only after the
-  handoff copy is complete.
 
 ## 0.4.0
 

@@ -1,6 +1,6 @@
 # dvd-ingester
 
-Current release: 1.0.0
+Current release: 1.0.1
 
 `dvd-ingester` is a Muster example repo for a Raspberry Pi OS or Debian box with
 a USB optical drive and a mounted media destination.
