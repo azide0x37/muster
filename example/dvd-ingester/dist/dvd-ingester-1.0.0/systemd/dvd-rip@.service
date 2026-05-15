@@ -11,6 +11,7 @@ EnvironmentFile=-/etc/dvd-ingester/dvd-ingester.env
 ExecStart=/opt/dvd-ingester/current/bin/dvd-rip-one /dev/%I --apply
 TimeoutStartSec=12h
 RuntimeDirectory=dvd-ingester
+RuntimeDirectoryPreserve=yes
 StateDirectory=dvd-ingester
 CacheDirectory=dvd-ingester
 Nice=10

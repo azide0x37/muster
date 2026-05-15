@@ -40,3 +40,24 @@ if find "$ROOT/var/cache/dvd-ingester/hot" -mindepth 1 -maxdepth 1 | grep -q .; 
   echo "hot directory was not drained" >&2
   exit 1
 fi
+
+INTERRUPT_ROOT="$(mktemp -d)"
+trap 'rm -rf "$ROOT" "$INTERRUPT_ROOT"' EXIT INT TERM
+INTERRUPT_STATE="$INTERRUPT_ROOT/run/dvd-ingester"
+INTERRUPT_WORK="$INTERRUPT_ROOT/work"
+INTERRUPT_HOT="$INTERRUPT_ROOT/hot"
+INTERRUPT_DEST="$INTERRUPT_ROOT/dest"
+mkdir -p "$INTERRUPT_STATE" "$INTERRUPT_WORK" "$INTERRUPT_HOT" "$INTERRUPT_DEST"
+  STATE_DIR="$INTERRUPT_STATE" \
+  WORK_DIR="$INTERRUPT_WORK" \
+  HOT_DIR="$INTERRUPT_HOT" \
+  DEST_DIR="$INTERRUPT_DEST" \
+  RIP_COMMAND="sleep 2" \
+  ./src/dvd-rip-one /dev/sr0 >"$INTERRUPT_ROOT/interrupted.out" 2>"$INTERRUPT_ROOT/interrupted.err" &
+pid=$!
+sleep 1
+kill -TERM "$pid"
+wait "$pid" || interrupted_status=$?
+test "${interrupted_status:-0}" = "143"
+grep -q '"reason":"interrupted"' "$INTERRUPT_STATE/rip.json"
+find "$INTERRUPT_WORK" -name .ingest-interrupted | grep -q .

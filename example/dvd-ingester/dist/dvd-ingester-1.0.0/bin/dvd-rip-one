@@ -63,6 +63,7 @@ device_name=${device_name:-device}
 RUN_ID="$device_name-$(date -u '+%Y%m%dT%H%M%SZ')-$$"
 RUN_DIR="$WORK_DIR/$RUN_ID"
 LOCK_FILE="$STATE_DIR/rip.lock"
+LOCK_DIR_TO_REMOVE=""
 
 mkdir -p "$STATE_DIR" "$WORK_DIR" "$HOT_DIR"
 if [ "$APPLY" != "1" ]; then
@@ -76,6 +77,28 @@ write_state() {
   printf '{"state":"%s","reason":"%s","device":"%s","run_id":"%s","work_dir":"%s","hot_dir":"%s","dest_dir":"%s"}\n' \
     "$state" "$reason" "$DEVICE" "$RUN_ID" "$WORK_DIR" "$HOT_DIR" "$DEST_DIR" > "$STATE_DIR/$file"
 }
+
+cleanup_lock_dir() {
+  if [ -n "$LOCK_DIR_TO_REMOVE" ]; then
+    rmdir "$LOCK_DIR_TO_REMOVE" 2>/dev/null || true
+  fi
+}
+
+handle_interrupted() {
+  set +e
+  mkdir -p "$STATE_DIR"
+  if [ -d "$RUN_DIR" ]; then
+    rm -f "$RUN_DIR/.ingest-in-progress"
+    touch "$RUN_DIR/.ingest-interrupted"
+  fi
+  write_state rip.json degraded interrupted
+  cleanup_lock_dir
+  printf '%s\n' "degraded: rip interrupted for $DEVICE" >&2
+  exit 143
+}
+
+trap handle_interrupted INT TERM HUP
+trap cleanup_lock_dir EXIT
 
 fingerprint_device() {
   uuid=""
@@ -190,8 +213,19 @@ handoff_to_hot() {
 }
 
 eject_device() {
-  if [ "$APPLY" = "1" ] && [ "$EJECT_AFTER_RIP" = "1" ] && command -v eject >/dev/null 2>&1; then
-    eject "$DEVICE" || true
+  if [ "$APPLY" != "1" ] || [ "$EJECT_AFTER_RIP" != "1" ]; then
+    return 0
+  fi
+  if ! command -v eject >/dev/null 2>&1; then
+    write_state eject.json degraded eject_command_missing
+    printf '%s\n' "warn: eject command not found; leaving $DEVICE loaded" >&2
+    return 0
+  fi
+  if eject "$DEVICE"; then
+    write_state eject.json healthy ejected
+  else
+    write_state eject.json degraded eject_failed
+    printf '%s\n' "warn: eject failed for $DEVICE" >&2
   fi
 }
 
@@ -209,7 +243,7 @@ else
     printf '%s\n' "degraded: another rip job is running" >&2
     exit 75
   fi
-  trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT INT TERM
+  LOCK_DIR_TO_REMOVE="$lock_dir"
 fi
 
 write_state event.json degraded device_event_recorded
