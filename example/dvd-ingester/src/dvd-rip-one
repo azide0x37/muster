@@ -63,6 +63,7 @@ device_name=$(basename "$DEVICE" | tr -cd 'A-Za-z0-9._-' | cut -c1-64)
 device_name=${device_name:-device}
 LOCK_FILE="$STATE_DIR/rip.lock"
 LOCK_DIR_TO_REMOVE=""
+HANDOFF_TMP_TO_REMOVE=""
 RUN_ID="$device_name-pending-$$"
 RUN_DIR="$WORK_DIR/$RUN_ID.work"
 
@@ -92,6 +93,17 @@ cleanup_lock_dir() {
   fi
 }
 
+cleanup_handoff_tmp() {
+  if [ -n "$HANDOFF_TMP_TO_REMOVE" ]; then
+    rm -rf "$HANDOFF_TMP_TO_REMOVE" 2>/dev/null || true
+  fi
+}
+
+cleanup_exit() {
+  cleanup_handoff_tmp
+  cleanup_lock_dir
+}
+
 handle_interrupted() {
   set +e
   mkdir -p "$STATE_DIR"
@@ -100,13 +112,13 @@ handle_interrupted() {
     touch "$RUN_DIR/.ingest-interrupted"
   fi
   write_state rip.json degraded interrupted
-  cleanup_lock_dir
+  cleanup_exit
   printf '%s\n' "degraded: rip interrupted for $DEVICE" >&2
   exit 143
 }
 
 trap handle_interrupted INT TERM HUP
-trap cleanup_lock_dir EXIT
+trap cleanup_exit EXIT
 
 safe_name() {
   printf '%s' "$1" | tr -cd 'A-Za-z0-9._ -' | tr ' ' '_' | cut -c1-80
@@ -250,13 +262,26 @@ existing_output_path() {
 
 handoff_to_hot() {
   target="$HOT_DIR/$RUN_ID"
+  tmp="$HOT_DIR/.incoming-$RUN_ID-$$"
   if existing="$(existing_output_path)"; then
     write_state rip.json degraded target_exists
     eject_device
     printf '%s\n' "degraded: output already exists for $RUN_ID at $existing" >&2
     exit 75
   fi
-  mv "$RUN_DIR" "$target"
+  rm -rf "$tmp"
+  HANDOFF_TMP_TO_REMOVE="$tmp"
+  mkdir -p "$tmp"
+  rm -f "$RUN_DIR/.ingest-complete"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete "$RUN_DIR"/ "$tmp"/
+  else
+    cp -Rp "$RUN_DIR/." "$tmp/"
+  fi
+  touch "$tmp/.ingest-complete"
+  mv "$tmp" "$target"
+  HANDOFF_TMP_TO_REMOVE=""
+  rm -rf "$RUN_DIR"
   printf '{"state":"ready_for_cold_publish","device":"%s","run_id":"%s","handoff":"%s"}\n' \
     "$DEVICE" "$RUN_ID" "$target" > "$STATE_DIR/handoff.json"
 }

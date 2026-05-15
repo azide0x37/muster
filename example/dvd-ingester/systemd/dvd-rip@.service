@@ -2,7 +2,6 @@
 Description=DVD ingest job for /dev/%I
 Documentation=file:/opt/dvd-ingester/current/doc/README.md
 After=dev-%i.device local-fs.target
-BindsTo=dev-%i.device
 OnFailure=dvd-ingester-doctor.service
 
 [Service]
