@@ -1,0 +1,554 @@
+#!/bin/sh
+set -eu
+
+PROJECT="dvd-ingester"
+APPLY=0
+DISCOVER=0
+CONTROL=0
+ONCE=0
+
+usage() {
+  printf '%s\n' "Usage: dvd-ha-mqtt-bridge [--apply] [--discover] [--control] [--once]"
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --apply) APPLY=1 ;;
+    --discover) DISCOVER=1 ;;
+    --control) CONTROL=1 ;;
+    --once) ONCE=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf '%s\n' "unknown argument: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+if [ "$DISCOVER" = "0" ] && [ "$CONTROL" = "0" ] && [ "$ONCE" = "0" ]; then
+  ONCE=1
+fi
+
+if [ "$APPLY" = "1" ]; then
+  CONFIG_FILE="${CONFIG_FILE:-/etc/$PROJECT/$PROJECT.env}"
+  MQTT_CONFIG_FILE="${MQTT_CONFIG_FILE:-/etc/$PROJECT/$PROJECT.mqtt.env}"
+  if [ -f "$CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$CONFIG_FILE"
+  fi
+  if [ -f "$MQTT_CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$MQTT_CONFIG_FILE"
+  fi
+  STATE_DIR="${STATE_DIR:-/run/$PROJECT}"
+  WORK_DIR="${WORK_DIR:-/var/lib/$PROJECT/work}"
+  HOT_DIR="${HOT_DIR:-/var/cache/$PROJECT/hot}"
+  DEST_DIR="${DEST_DIR:-/mnt/media/$PROJECT}"
+  VERSION_FILE="${VERSION_FILE:-/opt/$PROJECT/current/VERSION}"
+else
+  if [ -n "${CONFIG_FILE:-}" ] && [ -f "$CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$CONFIG_FILE"
+  fi
+  if [ -n "${MQTT_CONFIG_FILE:-}" ] && [ -f "$MQTT_CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$MQTT_CONFIG_FILE"
+  fi
+  MOCK_ROOT="${MUSTER_MOCK_ROOT:-${TMPDIR:-/tmp}/$PROJECT-mock}"
+  STATE_DIR="${STATE_DIR:-$MOCK_ROOT/run/$PROJECT}"
+  WORK_DIR="${WORK_DIR:-$MOCK_ROOT/var/lib/$PROJECT/work}"
+  HOT_DIR="${HOT_DIR:-$MOCK_ROOT/var/cache/$PROJECT/hot}"
+  DEST_DIR="${DEST_DIR:-$MOCK_ROOT/mnt/$PROJECT}"
+  VERSION_FILE="${VERSION_FILE:-VERSION}"
+fi
+
+HA_MQTT_ENABLE="${HA_MQTT_ENABLE:-0}"
+MQTT_HOST="${MQTT_HOST:-127.0.0.1}"
+MQTT_PORT="${MQTT_PORT:-1883}"
+MQTT_USERNAME="${MQTT_USERNAME:-}"
+MQTT_PASSWORD="${MQTT_PASSWORD:-}"
+MQTT_PUBLISH_TIMEOUT_SECONDS="${MQTT_PUBLISH_TIMEOUT_SECONDS:-5}"
+HA_DISCOVERY_PREFIX="${HA_DISCOVERY_PREFIX:-homeassistant}"
+HA_TOPIC_PREFIX="${HA_TOPIC_PREFIX:-muster/$PROJECT}"
+HA_NODE_ID="${HA_NODE_ID:-dvd_ingester}"
+HA_DEVICE_NAME="${HA_DEVICE_NAME:-dvd-ingester}"
+DISC_DEVICE="${DISC_DEVICE:-/dev/sr0}"
+DISK_PROBE_TIMEOUT_SECONDS="${DISK_PROBE_TIMEOUT_SECONDS:-2}"
+HA_MQTT_OUTBOX_DIR="${HA_MQTT_OUTBOX_DIR:-$STATE_DIR/ha-mqtt-outbox}"
+HA_MQTT_CONTROL_DIR="${HA_MQTT_CONTROL_DIR:-$STATE_DIR/ha-mqtt-control}"
+HA_FOLDER_INDEX_LIMIT="${HA_FOLDER_INDEX_LIMIT:-50}"
+CONTROL_COMMAND="${CONTROL_COMMAND:-}"
+MOSQUITTO_PUB="${MOSQUITTO_PUB:-mosquitto_pub}"
+PUBLISH_FAILED=0
+
+mkdir -p "$STATE_DIR" "$HA_MQTT_OUTBOX_DIR" "$HA_MQTT_CONTROL_DIR" "$HOT_DIR" "$WORK_DIR"
+if [ "$APPLY" != "1" ]; then
+  mkdir -p "$DEST_DIR"
+fi
+
+topic_file() {
+  printf '%s' "$1" | tr '/+' '__'
+}
+
+json_string() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+run_mosquitto_pub() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$MQTT_PUBLISH_TIMEOUT_SECONDS" "$MOSQUITTO_PUB" "$@"
+  else
+    "$MOSQUITTO_PUB" "$@"
+  fi
+}
+
+publish() {
+  topic="$1"
+  payload="$2"
+  retain="${3:-0}"
+  file="$HA_MQTT_OUTBOX_DIR/$(topic_file "$topic").json"
+  printf '%s\n' "$payload" > "$file"
+  printf '%s\t%s\tretain=%s\n' "$topic" "$file" "$retain" >> "$HA_MQTT_OUTBOX_DIR/topics.log"
+  if [ "$APPLY" = "1" ] && [ "$HA_MQTT_ENABLE" = "1" ]; then
+    if ! command -v "$MOSQUITTO_PUB" >/dev/null 2>&1; then
+      printf '%s\n' "mqtt publish failed: $MOSQUITTO_PUB is not installed or not executable" >&2
+      PUBLISH_FAILED=1
+      return 0
+    fi
+    if [ -n "$MQTT_USERNAME" ]; then
+      if [ "$retain" = "1" ]; then
+        run_mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USERNAME" -P "$MQTT_PASSWORD" -t "$topic" -m "$payload" -r || PUBLISH_FAILED=1
+      else
+        run_mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USERNAME" -P "$MQTT_PASSWORD" -t "$topic" -m "$payload" || PUBLISH_FAILED=1
+      fi
+    elif [ "$retain" = "1" ]; then
+      run_mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -t "$topic" -m "$payload" -r || PUBLISH_FAILED=1
+    else
+      run_mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -t "$topic" -m "$payload" || PUBLISH_FAILED=1
+    fi
+    if [ "$PUBLISH_FAILED" = "1" ]; then
+      printf '%s\n' "mqtt publish failed: topic=$topic host=$MQTT_HOST port=$MQTT_PORT" >&2
+    fi
+  fi
+}
+
+field_from_json() {
+  key="$1"
+  file="$2"
+  default="$3"
+  if [ -f "$file" ]; then
+    value=$(sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$file" | head -n 1)
+    if [ -n "$value" ]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  fi
+  printf '%s\n' "$default"
+}
+
+number_from_json() {
+  key="$1"
+  file="$2"
+  default="$3"
+  if [ -f "$file" ]; then
+    value=$(sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p" "$file" | head -n 1)
+    if [ -n "$value" ]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  fi
+  printf '%s\n' "$default"
+}
+
+df_value() {
+  path="$1"
+  column="$2"
+  if [ -d "$path" ]; then
+    df -Pk "$path" | awk -v column="$column" 'NR == 2 {printf "%.0f\n", $column * 1024}'
+  else
+    printf '%s\n' 0
+  fi
+}
+
+bytes_to_gib() {
+  awk -v bytes="$1" 'BEGIN { printf "%.1f\n", bytes / 1073741824 }'
+}
+
+systemd_pattern_state() {
+  pattern="$1"
+  if [ "$APPLY" != "1" ] || ! command -v systemctl >/dev/null 2>&1; then
+    printf '%s\n' unknown
+    return 0
+  fi
+  units=$(systemctl list-units --type=service --all "$pattern" --no-legend --plain 2>/dev/null || true)
+  if [ -z "$units" ]; then
+    printf '%s\n' idle
+    return 0
+  fi
+  if printf '%s\n' "$units" | awk '$3 == "failed" || $4 == "failed" { found = 1 } END { exit found ? 0 : 1 }'; then
+    printf '%s\n' failed
+    return 0
+  fi
+  if printf '%s\n' "$units" | awk '$3 == "active" || $3 == "activating" { found = 1 } END { exit found ? 0 : 1 }'; then
+    printf '%s\n' active
+    return 0
+  fi
+  printf '%s\n' idle
+}
+
+count_titles() {
+  if [ -d "$DEST_DIR" ]; then
+    find "$DEST_DIR" -mindepth 1 -maxdepth 1 -type d ! -name '.incoming-*' | wc -l | tr -d ' '
+  else
+    printf '%s\n' 0
+  fi
+}
+
+folder_bytes() {
+  path="$1"
+  if [ -d "$path" ]; then
+    du -sk "$path" 2>/dev/null | awk 'NR == 1 { printf "%.0f\n", $1 * 1024 }'
+  else
+    printf '%s\n' 0
+  fi
+}
+
+folder_item_count() {
+  path="$1"
+  exclude_incoming="$2"
+  if [ ! -d "$path" ]; then
+    printf '%s\n' 0
+    return 0
+  fi
+  if [ "$exclude_incoming" = "1" ]; then
+    find "$path" -mindepth 1 -maxdepth 1 -type d ! -name '.incoming-*' | wc -l | tr -d ' '
+  else
+    find "$path" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' '
+  fi
+}
+
+folder_entries_json() {
+  path="$1"
+  exclude_incoming="$2"
+  limit="$3"
+  if [ ! -d "$path" ]; then
+    printf '%s\n' '[]'
+    return 0
+  fi
+  if [ "$exclude_incoming" = "1" ]; then
+    entries=$(find "$path" -mindepth 1 -maxdepth 1 -type d ! -name '.incoming-*' -print 2>/dev/null | sort | head -n "$limit")
+  else
+    entries=$(find "$path" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort | head -n "$limit")
+  fi
+  printf '['
+  first=1
+  printf '%s\n' "$entries" | while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    name=$(basename "$entry")
+    if [ "$first" = "1" ]; then
+      first=0
+    else
+      printf ','
+    fi
+    printf '"%s"' "$(json_string "$name")"
+  done
+  printf ']'
+}
+
+folder_attributes_payload() {
+  path="$1"
+  exclude_incoming="$2"
+  count="$3"
+  bytes="$4"
+  entries="$5"
+  printf '{"path":"%s","bytes":%s,"count":%s,"limit":%s,"entries":%s}\n' \
+    "$(json_string "$path")" "$bytes" "$count" "$HA_FOLDER_INDEX_LIMIT" "$entries"
+}
+
+percent_value() {
+  current="$1"
+  total="$2"
+  awk -v current="$current" -v total="$total" 'BEGIN {
+    if (total <= 0) {
+      printf "0.0\n"
+      exit
+    }
+    pct = (current / total) * 100
+    if (pct < 0) pct = 0
+    if (pct > 100) pct = 100
+    printf "%.1f\n", pct
+  }'
+}
+
+first_matching_dir() {
+  path="$1"
+  name_pattern="$2"
+  if [ -d "$path" ]; then
+    find "$path" -mindepth 1 -maxdepth 1 -type d -name "$name_pattern" -print 2>/dev/null | sort | head -n 1
+  fi
+}
+
+probe_disk_identity() {
+  if command -v udevadm >/dev/null 2>&1; then
+    if udevadm info -q property -n "$DISC_DEVICE" 2>/dev/null | grep -q '^ID_CDROM_MEDIA=1$'; then
+      return 0
+    fi
+  fi
+  if command -v blkid >/dev/null 2>&1; then
+    if command -v timeout >/dev/null 2>&1; then
+      timeout "$DISK_PROBE_TIMEOUT_SECONDS" blkid "$DISC_DEVICE" >/dev/null 2>&1
+    else
+      blkid "$DISC_DEVICE" >/dev/null 2>&1
+    fi
+  else
+    test -e "$DISC_DEVICE"
+  fi
+}
+
+disk_state_value() {
+  if [ "$rip_state" = "active" ] || [ "$rip_state" = "activating" ]; then
+    printf '%s\n' loaded
+    return 0
+  fi
+  if [ ! -e "$DISC_DEVICE" ]; then
+    printf '%s\n' missing_device
+    return 0
+  fi
+  if probe_disk_identity; then
+    printf '%s\n' loaded
+    return 0
+  fi
+  code=$?
+  if [ "$code" = "124" ]; then
+    printf '%s\n' busy
+  else
+    printf '%s\n' no_media
+  fi
+}
+
+state_rank() {
+  case "$1" in
+    failed) printf '%s\n' 3 ;;
+    degraded|missing_dest|low_capacity) printf '%s\n' 2 ;;
+    unknown) printf '%s\n' 1 ;;
+    active|activating|healthy|idle|ready|waiting|ok|success) printf '%s\n' 0 ;;
+    *) printf '%s\n' 1 ;;
+  esac
+}
+
+compute_health() {
+  if [ -f "$STATE_DIR/disabled" ]; then
+    printf '%s\n' disabled
+    return 0
+  fi
+  worst=0
+  for state in "$capability_state" "$hot_capacity_state" "$rip_state" "$publish_state"; do
+    rank=$(state_rank "$state")
+    if [ "$rank" -gt "$worst" ]; then
+      worst="$rank"
+    fi
+  done
+  case "$worst" in
+    3) printf '%s\n' failed ;;
+    2) printf '%s\n' degraded ;;
+    1) printf '%s\n' unknown ;;
+    *) printf '%s\n' healthy ;;
+  esac
+}
+
+publish_discovery() {
+  discovery_topic="$HA_DISCOVERY_PREFIX/device/$HA_NODE_ID/config"
+  availability_topic="$HA_TOPIC_PREFIX/availability"
+  state_topic="$HA_TOPIC_PREFIX/state"
+  work_attrs_topic="$HA_TOPIC_PREFIX/folders/work/attributes"
+  hot_attrs_topic="$HA_TOPIC_PREFIX/folders/hot/attributes"
+  nas_attrs_topic="$HA_TOPIC_PREFIX/folders/nas/attributes"
+  enabled_state_topic="$HA_TOPIC_PREFIX/enabled/state"
+  enabled_command_topic="$HA_TOPIC_PREFIX/control/enabled/set"
+  restart_command_topic="$HA_TOPIC_PREFIX/control/restart/set"
+  payload=$(cat <<EOF
+{"device":{"identifiers":["$(json_string "$HA_NODE_ID")"],"name":"$(json_string "$HA_DEVICE_NAME")"},"origin":{"name":"dvd-ingester","sw_version":"$(json_string "$version")"},"availability":{"topic":"$(json_string "$availability_topic")"},"components":{"health":{"platform":"sensor","name":"Health","unique_id":"$(json_string "$HA_NODE_ID")_health","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.health }}"},"rip_state":{"platform":"sensor","name":"Extraction Status","unique_id":"$(json_string "$HA_NODE_ID")_rip_state","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.extraction_status }}"},"conveyance_status":{"platform":"sensor","name":"Conveyance Status","unique_id":"$(json_string "$HA_NODE_ID")_conveyance_status","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.conveyance_status }}"},"capability_state":{"platform":"sensor","name":"Capability State","unique_id":"$(json_string "$HA_NODE_ID")_capability_state","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.capability_state }}","entity_category":"diagnostic"},"hot_capacity_state":{"platform":"sensor","name":"Hot Capacity State","unique_id":"$(json_string "$HA_NODE_ID")_hot_capacity_state","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.hot_capacity_state }}","entity_category":"diagnostic"},"publish_state":{"platform":"sensor","name":"Publish State","unique_id":"$(json_string "$HA_NODE_ID")_publish_state","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.publish_state }}","entity_category":"diagnostic"},"published_count":{"platform":"sensor","name":"Published Count","unique_id":"$(json_string "$HA_NODE_ID")_published_count","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.published_count }}","entity_category":"diagnostic"},"failed_count":{"platform":"sensor","name":"Failed Count","unique_id":"$(json_string "$HA_NODE_ID")_failed_count","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.failed_count }}","entity_category":"diagnostic"},"version":{"platform":"sensor","name":"Version","unique_id":"$(json_string "$HA_NODE_ID")_version","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.version }}","entity_category":"diagnostic"},"local_used":{"platform":"sensor","name":"Local Used","unique_id":"$(json_string "$HA_NODE_ID")_local_used","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.local_dir_used_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"local_free":{"platform":"sensor","name":"Local Free","unique_id":"$(json_string "$HA_NODE_ID")_local_free","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.local_dir_free_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"local_total":{"platform":"sensor","name":"Local Total","unique_id":"$(json_string "$HA_NODE_ID")_local_total","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.local_dir_total_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"nas_used":{"platform":"sensor","name":"NAS Used","unique_id":"$(json_string "$HA_NODE_ID")_nas_used","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.nas_dir_used_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"nas_free":{"platform":"sensor","name":"NAS Free","unique_id":"$(json_string "$HA_NODE_ID")_nas_free","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.nas_dir_free_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"nas_total":{"platform":"sensor","name":"NAS Total","unique_id":"$(json_string "$HA_NODE_ID")_nas_total","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.nas_dir_total_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"work_items":{"platform":"sensor","name":"Work Items","unique_id":"$(json_string "$HA_NODE_ID")_work_items","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.work_dir_items }}","json_attributes_topic":"$(json_string "$work_attrs_topic")","icon":"mdi:folder-clock"},"hot_items":{"platform":"sensor","name":"Hot Items","unique_id":"$(json_string "$HA_NODE_ID")_hot_items","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.hot_dir_items }}","json_attributes_topic":"$(json_string "$hot_attrs_topic")","icon":"mdi:folder-move"},"extracted_titles":{"platform":"sensor","name":"Extracted Titles","unique_id":"$(json_string "$HA_NODE_ID")_extracted_titles","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.extracted_titles }}","json_attributes_topic":"$(json_string "$nas_attrs_topic")","icon":"mdi:folder-multiple"},"restart_service":{"platform":"button","name":"Restart Service","unique_id":"$(json_string "$HA_NODE_ID")_restart_service","command_topic":"$(json_string "$restart_command_topic")","payload_press":"PRESS"},"enabled":{"platform":"switch","name":"Enabled","unique_id":"$(json_string "$HA_NODE_ID")_enabled","state_topic":"$(json_string "$enabled_state_topic")","command_topic":"$(json_string "$enabled_command_topic")","payload_on":"ON","payload_off":"OFF"}}}
+EOF
+)
+  publish "$discovery_topic" "$payload" 1
+  publish "$HA_DISCOVERY_PREFIX/sensor/${HA_NODE_ID}_disk_state/config" "$(printf '{"name":"Disk State","unique_id":"%s_disk_state","state_topic":"%s","value_template":"{{ value_json.disk_state }}","icon":"mdi:disc","device":{"identifiers":["%s"],"name":"%s"},"origin":{"name":"dvd-ingester","sw_version":"%s"},"availability":{"topic":"%s"}}' "$(json_string "$HA_NODE_ID")" "$(json_string "$state_topic")" "$(json_string "$HA_NODE_ID")" "$(json_string "$HA_DEVICE_NAME")" "$(json_string "$version")" "$(json_string "$availability_topic")")" 1
+  publish "$HA_DISCOVERY_PREFIX/sensor/${HA_NODE_ID}_extraction_progress/config" "$(printf '{"name":"Extraction Progress","unique_id":"%s_extraction_progress","state_topic":"%s","value_template":"{{ value_json.extraction_progress_percent }}","unit_of_measurement":"%%","state_class":"measurement","icon":"mdi:progress-clock","suggested_display_precision":1,"device":{"identifiers":["%s"],"name":"%s"},"origin":{"name":"dvd-ingester","sw_version":"%s"},"availability":{"topic":"%s"}}' "$(json_string "$HA_NODE_ID")" "$(json_string "$state_topic")" "$(json_string "$HA_NODE_ID")" "$(json_string "$HA_DEVICE_NAME")" "$(json_string "$version")" "$(json_string "$availability_topic")")" 1
+  publish "$HA_DISCOVERY_PREFIX/sensor/${HA_NODE_ID}_conveyance_progress/config" "$(printf '{"name":"Conveyance Progress","unique_id":"%s_conveyance_progress","state_topic":"%s","value_template":"{{ value_json.conveyance_progress_percent }}","unit_of_measurement":"%%","state_class":"measurement","icon":"mdi:progress-upload","suggested_display_precision":1,"device":{"identifiers":["%s"],"name":"%s"},"origin":{"name":"dvd-ingester","sw_version":"%s"},"availability":{"topic":"%s"}}' "$(json_string "$HA_NODE_ID")" "$(json_string "$state_topic")" "$(json_string "$HA_NODE_ID")" "$(json_string "$HA_DEVICE_NAME")" "$(json_string "$version")" "$(json_string "$availability_topic")")" 1
+}
+
+process_controls() {
+  control_bin="${CONTROL_COMMAND:-$(dirname "$0")/dvd-control}"
+  for command_file in "$HA_MQTT_CONTROL_DIR"/*.cmd; do
+    [ -e "$command_file" ] || continue
+    entity=$(basename "$command_file" .cmd)
+    command=$(sed -n '1p' "$command_file" | tr -d '\r\n')
+    case "$entity:$command" in
+      restart:PRESS|restart:RESTART)
+        if [ "$APPLY" = "1" ]; then
+          "$control_bin" --apply restart >/dev/null
+        else
+          "$control_bin" restart >/dev/null
+        fi
+        mv "$command_file" "$command_file.processed"
+        ;;
+      enabled:ON)
+        if [ "$APPLY" = "1" ]; then
+          "$control_bin" --apply enable >/dev/null
+        else
+          "$control_bin" enable >/dev/null
+        fi
+        mv "$command_file" "$command_file.processed"
+        ;;
+      enabled:OFF)
+        if [ "$APPLY" = "1" ]; then
+          "$control_bin" --apply disable >/dev/null
+        else
+          "$control_bin" disable >/dev/null
+        fi
+        mv "$command_file" "$command_file.processed"
+        ;;
+      *)
+        printf '%s\n' "rejected control payload: $entity=$command" >&2
+        mv "$command_file" "$command_file.rejected"
+        exit 1
+        ;;
+    esac
+  done
+}
+
+capability_state=$(field_from_json state "$STATE_DIR/capability.json" unknown)
+hot_capacity_state=$(field_from_json state "$STATE_DIR/hot-capacity.json" unknown)
+rip_state=$(field_from_json state "$STATE_DIR/rip.json" unknown)
+rip_reason=$(field_from_json reason "$STATE_DIR/rip.json" unknown)
+publish_state=$(field_from_json state "$STATE_DIR/publish.json" unknown)
+published_count=$(number_from_json published "$STATE_DIR/publish.json" 0)
+failed_count=$(number_from_json failed "$STATE_DIR/publish.json" 0)
+conveyance_status=$(field_from_json state "$STATE_DIR/handoff.json" "$publish_state")
+if [ "$rip_state" = "active" ] || [ "$rip_state" = "activating" ]; then
+  conveyance_status=waiting_for_extraction
+fi
+version=$(cat "$VERSION_FILE" 2>/dev/null || printf '%s\n' unknown)
+enabled=ON
+if [ -f "$STATE_DIR/disabled" ]; then
+  enabled=OFF
+fi
+
+local_free=$(df_value "$HOT_DIR" 4)
+local_total=$(df_value "$HOT_DIR" 2)
+local_used=$((local_total - local_free))
+nas_free=$(df_value "$DEST_DIR" 4)
+nas_total=$(df_value "$DEST_DIR" 2)
+nas_used=$((nas_total - nas_free))
+local_used_gib=$(bytes_to_gib "$local_used")
+local_free_gib=$(bytes_to_gib "$local_free")
+local_total_gib=$(bytes_to_gib "$local_total")
+nas_used_gib=$(bytes_to_gib "$nas_used")
+nas_free_gib=$(bytes_to_gib "$nas_free")
+nas_total_gib=$(bytes_to_gib "$nas_total")
+extracted_titles=$(count_titles)
+work_dir_items=$(folder_item_count "$WORK_DIR" 0)
+hot_dir_items=$(folder_item_count "$HOT_DIR" 0)
+work_dir_bytes=$(folder_bytes "$WORK_DIR")
+hot_dir_bytes=$(folder_bytes "$HOT_DIR")
+nas_dir_bytes="$nas_used"
+work_entries=$(folder_entries_json "$WORK_DIR" 0 "$HA_FOLDER_INDEX_LIMIT")
+hot_entries=$(folder_entries_json "$HOT_DIR" 0 "$HA_FOLDER_INDEX_LIMIT")
+nas_entries=$(folder_entries_json "$DEST_DIR" 1 "$HA_FOLDER_INDEX_LIMIT")
+work_attrs_payload=$(folder_attributes_payload "$WORK_DIR" 0 "$work_dir_items" "$work_dir_bytes" "$work_entries")
+hot_attrs_payload=$(folder_attributes_payload "$HOT_DIR" 0 "$hot_dir_items" "$hot_dir_bytes" "$hot_entries")
+nas_attrs_payload=$(folder_attributes_payload "$DEST_DIR" 1 "$extracted_titles" "$nas_dir_bytes" "$nas_entries")
+current_run_id=$(field_from_json run_id "$STATE_DIR/rip.json" "")
+handoff_run_id=$(field_from_json run_id "$STATE_DIR/handoff.json" "$current_run_id")
+current_run_dir=""
+current_run_bytes=0
+current_disc_size=0
+if [ -n "$current_run_id" ]; then
+  current_run_dir=$(first_matching_dir "$WORK_DIR" "$current_run_id.work.*" | head -n 1)
+fi
+if [ -n "$current_run_dir" ] && [ -d "$current_run_dir" ]; then
+  current_run_bytes=$(folder_bytes "$current_run_dir")
+  current_disc_size=$(field_from_json size "$current_run_dir/metadata.json" 0)
+fi
+case "$current_disc_size" in
+  ''|*[!0-9]*) current_disc_size=0 ;;
+esac
+if [ "$rip_state" = "active" ] || [ "$rip_state" = "activating" ]; then
+  extraction_progress_percent=$(percent_value "$current_run_bytes" "$current_disc_size")
+elif [ "$rip_state" = "healthy" ] && [ "$rip_reason" = "ready_for_cold_publish" ]; then
+  extraction_progress_percent=100.0
+else
+  extraction_progress_percent=0.0
+fi
+
+incoming_dir=""
+hot_source_bytes=0
+incoming_bytes=0
+if [ -n "$handoff_run_id" ]; then
+  incoming_dir=$(first_matching_dir "$DEST_DIR" ".incoming-$handoff_run_id-*" | head -n 1)
+  if [ -d "$HOT_DIR/$handoff_run_id" ]; then
+    hot_source_bytes=$(folder_bytes "$HOT_DIR/$handoff_run_id")
+  fi
+fi
+if [ -n "$incoming_dir" ] && [ -d "$incoming_dir" ]; then
+  incoming_bytes=$(folder_bytes "$incoming_dir")
+  conveyance_progress_percent=$(percent_value "$incoming_bytes" "$hot_source_bytes")
+elif [ "$conveyance_status" = "waiting_for_extraction" ]; then
+  conveyance_progress_percent=0.0
+elif [ -n "$handoff_run_id" ] && [ -d "$DEST_DIR/$handoff_run_id" ]; then
+  conveyance_progress_percent=100.0
+else
+  conveyance_progress_percent=0.0
+fi
+
+if [ ! -f "$STATE_DIR/capability.json" ]; then
+  if [ -d "$DEST_DIR" ]; then
+    capability_state=healthy
+  else
+    capability_state=missing_dest
+  fi
+fi
+if [ ! -f "$STATE_DIR/hot-capacity.json" ]; then
+  if [ "$local_free" -ge "${MIN_HOT_FREE_BYTES:-10737418240}" ]; then
+    hot_capacity_state=healthy
+  else
+    hot_capacity_state=low_capacity
+  fi
+fi
+if [ ! -f "$STATE_DIR/rip.json" ]; then
+  rip_state=$(systemd_pattern_state 'dvd-rip@*.service')
+  rip_reason="$rip_state"
+fi
+if [ ! -f "$STATE_DIR/publish.json" ]; then
+  publish_state=$(systemd_pattern_state 'dvd-publish-one.service')
+fi
+if [ ! -f "$STATE_DIR/handoff.json" ]; then
+  conveyance_status="$publish_state"
+fi
+
+disk_state=$(disk_state_value)
+health=$(compute_health)
+
+state_payload=$(printf '{"health":"%s","enabled":"%s","version":"%s","disk_state":"%s","extraction_status":"%s","extraction_reason":"%s","extraction_progress_percent":%s,"extraction_current_bytes":%s,"extraction_target_bytes":%s,"conveyance_status":"%s","conveyance_progress_percent":%s,"conveyance_current_bytes":%s,"conveyance_target_bytes":%s,"capability_state":"%s","hot_capacity_state":"%s","publish_state":"%s","published_count":%s,"failed_count":%s,"local_dir_used_bytes":%s,"local_dir_free_bytes":%s,"local_dir_total_bytes":%s,"local_dir_used_gib":%s,"local_dir_free_gib":%s,"local_dir_total_gib":%s,"nas_dir_used_bytes":%s,"nas_dir_free_bytes":%s,"nas_dir_total_bytes":%s,"nas_dir_used_gib":%s,"nas_dir_free_gib":%s,"nas_dir_total_gib":%s,"work_dir_items":%s,"work_dir_bytes":%s,"hot_dir_items":%s,"hot_dir_bytes":%s,"extracted_titles":%s,"nas_dir_bytes":%s}' "$(json_string "$health")" "$enabled" "$(json_string "$version")" "$(json_string "$disk_state")" "$(json_string "$rip_state")" "$(json_string "$rip_reason")" "$extraction_progress_percent" "$current_run_bytes" "$current_disc_size" "$(json_string "$conveyance_status")" "$conveyance_progress_percent" "$incoming_bytes" "$hot_source_bytes" "$(json_string "$capability_state")" "$(json_string "$hot_capacity_state")" "$(json_string "$publish_state")" "$published_count" "$failed_count" "$local_used" "$local_free" "$local_total" "$local_used_gib" "$local_free_gib" "$local_total_gib" "$nas_used" "$nas_free" "$nas_total" "$nas_used_gib" "$nas_free_gib" "$nas_total_gib" "$work_dir_items" "$work_dir_bytes" "$hot_dir_items" "$hot_dir_bytes" "$extracted_titles" "$nas_dir_bytes")
+
+if [ "$DISCOVER" = "1" ] || [ "$ONCE" = "1" ]; then
+  publish_discovery
+fi
+
+publish "$HA_TOPIC_PREFIX/availability" online 1
+publish "$HA_TOPIC_PREFIX/state" "$state_payload" 1
+publish "$HA_TOPIC_PREFIX/folders/work/attributes" "$work_attrs_payload" 1
+publish "$HA_TOPIC_PREFIX/folders/hot/attributes" "$hot_attrs_payload" 1
+publish "$HA_TOPIC_PREFIX/folders/nas/attributes" "$nas_attrs_payload" 1
+publish "$HA_TOPIC_PREFIX/enabled/state" "$enabled" 1
+printf '%s\n' "$state_payload" > "$STATE_DIR/ha-mqtt-state.json"
+printf '%s\n' "$work_attrs_payload" > "$STATE_DIR/ha-mqtt-work-folder.json"
+printf '%s\n' "$hot_attrs_payload" > "$STATE_DIR/ha-mqtt-hot-folder.json"
+printf '%s\n' "$nas_attrs_payload" > "$STATE_DIR/ha-mqtt-nas-folder.json"
+
+if [ "$CONTROL" = "1" ] || [ "$ONCE" = "1" ]; then
+  process_controls
+fi
+
+if [ "$PUBLISH_FAILED" = "1" ]; then
+  exit 1
+fi
+
+printf '%s\n' "ok: $PROJECT Home Assistant MQTT bridge updated"

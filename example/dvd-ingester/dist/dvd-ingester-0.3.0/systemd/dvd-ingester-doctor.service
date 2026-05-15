@@ -1,7 +1,0 @@
-[Unit]
-Description=Run dvd-ingester health checks
-
-[Service]
-Type=oneshot
-EnvironmentFile=/etc/dvd-ingester/dvd-ingester.env
-ExecStart=/opt/dvd-ingester/current/bin/doctor.sh

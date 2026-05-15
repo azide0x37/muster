@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh DVD ingest Home Assistant MQTT state
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Unit=dvd-ingester-ha-mqtt.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

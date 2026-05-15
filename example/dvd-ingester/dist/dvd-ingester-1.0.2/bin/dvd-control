@@ -1,0 +1,109 @@
+#!/bin/sh
+set -eu
+
+PROJECT="dvd-ingester"
+APPLY=0
+ACTION="${1:-status}"
+
+if [ "$ACTION" = "--apply" ]; then
+  APPLY=1
+  shift
+  ACTION="${1:-status}"
+fi
+
+usage() {
+  printf '%s\n' "Usage: dvd-control [--apply] status|restart|enable|disable"
+}
+
+case "$ACTION" in
+  status|restart|enable|disable) ;;
+  -h|--help) usage; exit 0 ;;
+  *) usage >&2; exit 2 ;;
+esac
+
+if [ "$APPLY" = "1" ]; then
+  CONFIG_FILE="${CONFIG_FILE:-/etc/$PROJECT/$PROJECT.env}"
+  if [ -f "$CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$CONFIG_FILE"
+  fi
+  STATE_DIR="${STATE_DIR:-/run/$PROJECT}"
+else
+  if [ -n "${CONFIG_FILE:-}" ] && [ -f "$CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$CONFIG_FILE"
+  fi
+  MOCK_ROOT="${MUSTER_MOCK_ROOT:-${TMPDIR:-/tmp}/$PROJECT-mock}"
+  STATE_DIR="${STATE_DIR:-$MOCK_ROOT/run/$PROJECT}"
+fi
+
+mkdir -p "$STATE_DIR"
+DISABLED_MARKER="$STATE_DIR/disabled"
+LOCK_FILE="$STATE_DIR/control.lock"
+
+enabled_state() {
+  if [ -f "$DISABLED_MARKER" ]; then
+    printf '%s\n' "OFF"
+  else
+    printf '%s\n' "ON"
+  fi
+}
+
+write_result() {
+  action="$1"
+  result="$2"
+  reason="$3"
+  enabled="$(enabled_state)"
+  printf '{"action":"%s","result":"%s","reason":"%s","enabled":"%s"}\n' \
+    "$action" "$result" "$reason" "$enabled" > "$STATE_DIR/control.json"
+}
+
+run_systemctl() {
+  if [ "$APPLY" = "1" ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl "$@" || return 1
+  fi
+}
+
+do_action() {
+  case "$ACTION" in
+    status)
+      write_result status ok status_only
+      ;;
+    restart)
+      run_systemctl restart dvd-publish-one.timer dvd-ingester-doctor.timer dvd-ingester-update.timer || true
+      run_systemctl start dvd-ingester-doctor.service || true
+      write_result restart ok rip_jobs_left_running
+      ;;
+    disable)
+      : > "$DISABLED_MARKER"
+      run_systemctl mask dvd-rip@.service || true
+      run_systemctl disable --now dvd-ingester-update.timer || true
+      write_result disable ok new_ingest_blocked_bridge_alive
+      ;;
+    enable)
+      rm -f "$DISABLED_MARKER"
+      run_systemctl unmask dvd-rip@.service || true
+      run_systemctl enable --now dvd-publish-one.timer dvd-ingester-doctor.timer dvd-ingester-update.timer || true
+      write_result enable ok owned_timers_enabled
+      ;;
+  esac
+}
+
+if command -v flock >/dev/null 2>&1 && [ "${MUSTER_FORCE_LOCKDIR:-0}" != "1" ]; then
+  exec 9>"$LOCK_FILE"
+  flock -n 9 || {
+    write_result "$ACTION" degraded already_running
+    exit 75
+  }
+  do_action
+else
+  lock_dir="$STATE_DIR/control.lockdir"
+  if ! mkdir "$lock_dir" 2>/dev/null; then
+    write_result "$ACTION" degraded already_running
+    exit 75
+  fi
+  trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT INT TERM
+  do_action
+fi
+
+cat "$STATE_DIR/control.json"
