@@ -20,9 +20,9 @@ DVD media becomes ready
   -> udev rule adds SYSTEMD_WANTS=dvd-rip@%k.service
   -> systemd runs /opt/dvd-ingester/current/bin/dvd-rip-one /dev/%I --apply
   -> dvd-rip-one proves DEST_DIR and waits for HOT_DIR capacity
-  -> completed rip moves to HOT_DIR/<run-id>
+  -> completed rip moves to HOT_DIR/<disc-title>_<fingerprint>
   -> dvd-publish-one.timer drains HOT_DIR to DEST_DIR
-  -> publish writes DEST_DIR/.incoming-<run-id> and atomically renames final output
+  -> publish writes DEST_DIR/.incoming-<disc-title>_<fingerprint> and atomically renames final output
 ```
 
 ## MPL Pattern Mapping
@@ -77,7 +77,9 @@ The installer creates `/etc/dvd-ingester/dvd-ingester.env` from
 | `UPDATE_MANIFEST_URL` | release manifest URL | Manifest used by `bin/update.sh` |
 
 `RIP_COMMAND` receives `DEVICE`, `RUN_DIR`, `RUN_ID`, and
-`DEVICE_FINGERPRINT` in the environment. If it is empty, apply mode tries
+`DEVICE_FINGERPRINT` in the environment. Output directories are named
+`<disc-title>_<fingerprint>` using the DVD filesystem label and a stable
+20-character identity hash. If `RIP_COMMAND` is empty, apply mode tries
 `dvdbackup` first, then `makemkvcon`. Mock mode writes a small payload for
 tests.
 

@@ -60,10 +60,10 @@ fi
 
 device_name=$(basename "$DEVICE" | tr -cd 'A-Za-z0-9._-' | cut -c1-64)
 device_name=${device_name:-device}
-RUN_ID="$device_name-$(date -u '+%Y%m%dT%H%M%SZ')-$$"
-RUN_DIR="$WORK_DIR/$RUN_ID"
 LOCK_FILE="$STATE_DIR/rip.lock"
 LOCK_DIR_TO_REMOVE=""
+RUN_ID="$device_name-pending-$$"
+RUN_DIR="$WORK_DIR/$RUN_ID.work"
 
 mkdir -p "$STATE_DIR" "$WORK_DIR" "$HOT_DIR"
 if [ "$APPLY" != "1" ]; then
@@ -100,20 +100,42 @@ handle_interrupted() {
 trap handle_interrupted INT TERM HUP
 trap cleanup_lock_dir EXIT
 
-fingerprint_device() {
-  uuid=""
-  label=""
-  if command -v blkid >/dev/null 2>&1; then
-    uuid="$(blkid -o value -s UUID "$DEVICE" 2>/dev/null || true)"
-    label="$(blkid -o value -s LABEL "$DEVICE" 2>/dev/null || true)"
-  fi
-  if [ -n "$uuid" ]; then
-    printf '%s\n' "$uuid"
-  elif [ -n "$label" ]; then
-    printf '%s\n' "$label"
+safe_name() {
+  printf '%s' "$1" | tr -cd 'A-Za-z0-9._ -' | tr ' ' '_' | cut -c1-80
+}
+
+hash_identity() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}' | cut -c1-20
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 | awk '{print $1}' | cut -c1-20
   else
-    printf '%s\n' "$device_name"
+    cksum | awk '{print $1}' | cut -c1-20
   fi
+}
+
+probe_disc_identity() {
+  DISC_LABEL="${DVD_DISC_LABEL:-}"
+  DISC_UUID="${DVD_DISC_UUID:-}"
+  DISC_TYPE="${DVD_DISC_TYPE:-}"
+  DISC_SIZE="${DVD_DISC_SIZE:-unknown}"
+
+  if command -v blkid >/dev/null 2>&1; then
+    DISC_UUID="${DISC_UUID:-$(blkid -o value -s UUID "$DEVICE" 2>/dev/null || true)}"
+    DISC_LABEL="${DISC_LABEL:-$(blkid -o value -s LABEL "$DEVICE" 2>/dev/null || true)}"
+    DISC_TYPE="${DISC_TYPE:-$(blkid -o value -s TYPE "$DEVICE" 2>/dev/null || true)}"
+  fi
+  if [ "$DISC_SIZE" = "unknown" ] && command -v blockdev >/dev/null 2>&1; then
+    DISC_SIZE="$(blockdev --getsize64 "$DEVICE" 2>/dev/null || printf '%s\n' unknown)"
+  fi
+
+  DISC_LABEL="${DISC_LABEL:-DVDVolume}"
+  DISC_TYPE="${DISC_TYPE:-unknown}"
+  SAFE_LABEL="$(safe_name "$DISC_LABEL")"
+  SAFE_LABEL="${SAFE_LABEL:-DVDVolume}"
+  DEVICE_FINGERPRINT="${DVD_DISC_FINGERPRINT:-$(printf '%s|%s|%s|%s\n' "$DISC_LABEL" "$DISC_UUID" "$DISC_TYPE" "$DISC_SIZE" | hash_identity)}"
+  RUN_ID="${SAFE_LABEL}_${DEVICE_FINGERPRINT}"
+  RUN_DIR="$WORK_DIR/$RUN_ID.work.$$"
 }
 
 require_capability() {
@@ -179,11 +201,11 @@ wait_for_hot_capacity() {
 }
 
 run_ingest() {
-  DEVICE_FINGERPRINT="$(fingerprint_device)"
-  export DEVICE RUN_DIR RUN_ID DEVICE_FINGERPRINT
+  export DEVICE RUN_DIR RUN_ID DEVICE_FINGERPRINT DISC_LABEL DISC_UUID DISC_TYPE DISC_SIZE
   mkdir -p "$RUN_DIR"
   touch "$RUN_DIR/.ingest-in-progress"
-  printf '{"device":"%s","fingerprint":"%s","run_id":"%s"}\n' "$DEVICE" "$DEVICE_FINGERPRINT" "$RUN_ID" > "$RUN_DIR/metadata.json"
+  printf '{"device":"%s","label":"%s","uuid":"%s","type":"%s","size":"%s","fingerprint":"%s","run_id":"%s"}\n' \
+    "$DEVICE" "$DISC_LABEL" "$DISC_UUID" "$DISC_TYPE" "$DISC_SIZE" "$DEVICE_FINGERPRINT" "$RUN_ID" > "$RUN_DIR/metadata.json"
 
   if [ -n "$RIP_COMMAND" ]; then
     sh -c "$RIP_COMMAND" || return 1
@@ -204,9 +226,26 @@ run_ingest() {
   touch "$RUN_DIR/.ingest-complete"
 }
 
+existing_output_path() {
+  if [ -e "$HOT_DIR/$RUN_ID" ]; then
+    printf '%s\n' "$HOT_DIR/$RUN_ID"
+    return 0
+  fi
+  if [ -e "$DEST_DIR/$RUN_ID" ]; then
+    printf '%s\n' "$DEST_DIR/$RUN_ID"
+    return 0
+  fi
+  return 1
+}
+
 handoff_to_hot() {
   target="$HOT_DIR/$RUN_ID"
-  rm -rf "$target"
+  if existing="$(existing_output_path)"; then
+    write_state rip.json degraded target_exists
+    eject_device
+    printf '%s\n' "degraded: output already exists for $RUN_ID at $existing" >&2
+    exit 75
+  fi
   mv "$RUN_DIR" "$target"
   printf '{"state":"ready_for_cold_publish","device":"%s","run_id":"%s","handoff":"%s"}\n' \
     "$DEVICE" "$RUN_ID" "$target" > "$STATE_DIR/handoff.json"
@@ -229,6 +268,8 @@ eject_device() {
   fi
 }
 
+probe_disc_identity
+
 if command -v flock >/dev/null 2>&1 && [ "${MUSTER_FORCE_LOCKDIR:-0}" != "1" ]; then
   exec 9>"$LOCK_FILE"
   if ! flock -n 9; then
@@ -248,6 +289,15 @@ fi
 
 write_state event.json degraded device_event_recorded
 require_capability
+
+if existing="$(existing_output_path)"; then
+  printf '{"state":"healthy","reason":"target_exists","device":"%s","run_id":"%s","output":"%s"}\n' \
+    "$DEVICE" "$RUN_ID" "$existing" > "$STATE_DIR/rip.json"
+  eject_device
+  printf '%s\n' "ok: $PROJECT output already exists for $RUN_ID"
+  exit 0
+fi
+
 wait_for_hot_capacity
 
 if ! run_ingest; then

@@ -6,6 +6,11 @@ trap 'rm -rf "$ROOT"' EXIT INT TERM
 
 MUSTER_MOCK_ROOT="$ROOT" \
   MUSTER_MOCK_BACKPRESSURE=1 \
+  DVD_DISC_LABEL="DVDTitle" \
+  DVD_DISC_UUID="12345678" \
+  DVD_DISC_TYPE="udf" \
+  DVD_DISC_SIZE="2048" \
+  DVD_DISC_FINGERPRINT="1234567890abcdefabcd" \
   MIN_HOT_FREE_BYTES=1 \
   CAPACITY_TIMEOUT_SECONDS=5 \
   CAPACITY_INTERVAL_SECONDS=1 \
@@ -22,6 +27,8 @@ grep -q 'capacity_available' "$ROOT/run/dvd-ingester/hot-capacity.json"
 
 hot_count=$(find "$ROOT/var/cache/dvd-ingester/hot" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
 test "$hot_count" = "1"
+test -d "$ROOT/var/cache/dvd-ingester/hot/DVDTitle_1234567890abcdefabcd"
+grep -q '"label":"DVDTitle"' "$ROOT/var/cache/dvd-ingester/hot/DVDTitle_1234567890abcdefabcd/metadata.json"
 
 MUSTER_MOCK_ROOT="$ROOT" ./src/dvd-publish-one --once >"$ROOT/publish.out"
 grep -q 'ok: dvd-ingester publish drain complete' "$ROOT/publish.out"
@@ -30,6 +37,17 @@ grep -q '"published":1' "$ROOT/run/dvd-ingester/publish.json"
 
 cold_count=$(find "$ROOT/mnt/dvd-ingester" -mindepth 1 -maxdepth 1 -type d ! -name '.incoming-*' | wc -l | tr -d ' ')
 test "$cold_count" = "1"
+test -d "$ROOT/mnt/dvd-ingester/DVDTitle_1234567890abcdefabcd"
+
+MUSTER_MOCK_ROOT="$ROOT" \
+  DVD_DISC_LABEL="DVDTitle" \
+  DVD_DISC_UUID="12345678" \
+  DVD_DISC_TYPE="udf" \
+  DVD_DISC_SIZE="2048" \
+  DVD_DISC_FINGERPRINT="1234567890abcdefabcd" \
+  ./src/dvd-rip-one /dev/sr0 >"$ROOT/duplicate.out"
+grep -q 'output already exists for DVDTitle_1234567890abcdefabcd' "$ROOT/duplicate.out"
+grep -q '"reason":"target_exists"' "$ROOT/run/dvd-ingester/rip.json"
 
 if find "$ROOT/mnt/dvd-ingester" -mindepth 1 -maxdepth 1 -name '.incoming-*' | grep -q .; then
   echo "publish left destination temp directories" >&2
@@ -48,10 +66,12 @@ INTERRUPT_WORK="$INTERRUPT_ROOT/work"
 INTERRUPT_HOT="$INTERRUPT_ROOT/hot"
 INTERRUPT_DEST="$INTERRUPT_ROOT/dest"
 mkdir -p "$INTERRUPT_STATE" "$INTERRUPT_WORK" "$INTERRUPT_HOT" "$INTERRUPT_DEST"
-  STATE_DIR="$INTERRUPT_STATE" \
+STATE_DIR="$INTERRUPT_STATE" \
   WORK_DIR="$INTERRUPT_WORK" \
   HOT_DIR="$INTERRUPT_HOT" \
   DEST_DIR="$INTERRUPT_DEST" \
+  DVD_DISC_LABEL="Interrupted DVD" \
+  DVD_DISC_FINGERPRINT="interrupted1234567" \
   RIP_COMMAND="sleep 2" \
   ./src/dvd-rip-one /dev/sr0 >"$INTERRUPT_ROOT/interrupted.out" 2>"$INTERRUPT_ROOT/interrupted.err" &
 pid=$!

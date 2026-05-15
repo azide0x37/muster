@@ -10,6 +10,8 @@
   credentials are not mixed into the general appliance config.
 - Added mock tests for discovery payloads, state aggregation, and rejected
   command payloads.
+- Restored disc-title output directory names in the hot/cold conveyor, using
+  `<disc-title>_<fingerprint>` instead of device/timestamp run names.
 
 ## 0.4.0
 
