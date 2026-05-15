@@ -16,14 +16,17 @@ architecture:
   lifecycle_owner: systemd
   hot_storage: /var/cache/dvd-ingester/hot
   cold_storage: configured mounted destination
+  homeassistant_bridge: MQTT discovery and bounded controls
 lifecycle:
   manager: systemd
   update_polling: systemd-timer
   health_check: bin/doctor.sh
 patterns:
   source: https://github.com/azide0x37/muster-pattern-library/tree/main
-  verified_head: 309eb158a8f0e3c75187e4ad42a0809780320747
+  verified_head: 279573b65c7c72e6b3d4fb96e9d69edfc7f86aaf
   primary: T2R4.device-triggered-conveyor
+  integrations:
+    - T2R6.home-assistant-mqtt-bridge
   required_atoms:
     - C1.service-capsule
     - C2.persistent-tick
@@ -34,6 +37,7 @@ patterns:
     - R5.capability-mount
     - T2C1.hot-cold-nas-conveyor
     - T2C3.scheduled-herald
+    - T2R6.home-assistant-mqtt-bridge
   mapping:
     device_binding:
       atom: R2.device-binding
@@ -69,6 +73,14 @@ patterns:
         - rip.json
         - handoff.json
         - publish.json
+    homeassistant_mqtt_bridge:
+      atom: T2R6.home-assistant-mqtt-bridge
+      evidence:
+        - src/dvd-ha-mqtt-bridge
+        - src/dvd-control
+        - systemd/dvd-ingester-ha-mqtt.service
+        - systemd/dvd-ingester-ha-mqtt.timer
+        - dvd-ingester.mqtt.env
 python:
   allowed: when title selection or metadata handling becomes structurally worse in shell
   required_tool: uv

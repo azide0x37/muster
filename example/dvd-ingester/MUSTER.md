@@ -2,7 +2,8 @@
 
 `dvd-ingester` is an `impl muster` example for a DVD ingest appliance. It is a
 fresh concrete implementation of the Muster Pattern Library
-`T2R4.device-triggered-conveyor` pattern.
+`T2R4.device-triggered-conveyor` pattern with a
+`T2R6.home-assistant-mqtt-bridge` integration.
 
 Architecture:
 
@@ -14,6 +15,7 @@ DVD drive readiness
   -> hot local handoff
   -> dvd-publish-one timer drain
   -> mounted cold destination
+  -> dvd-ha-mqtt-bridge publishes Home Assistant state
 ```
 
 ## MPL Mapping
@@ -21,6 +23,10 @@ DVD drive readiness
 Primary pattern:
 
 `T2R4.device-triggered-conveyor`
+
+Integration pattern:
+
+`T2R6.home-assistant-mqtt-bridge`
 
 Subpattern mapping:
 
@@ -32,6 +38,7 @@ Subpattern mapping:
 | repeated drains, health checks, and updates | `C2.persistent-tick`, `T2C3.scheduled-herald` | publish, doctor, and update timers |
 | failed and degraded states stay inspectable | `C5.failure-ratchet` | JSON state files and `.ingest-failed` markers |
 | installer, updater, uninstaller, package | `C6.lifecycle-capsule` | `bin/*.sh`, `Makefile`, release manifest |
+| Home Assistant discovery and scoped controls | `T2R6.home-assistant-mqtt-bridge` | `src/dvd-ha-mqtt-bridge`, `src/dvd-control`, `dvd-ingester-ha-mqtt.*` |
 
 ## Stable Contract Notes
 
@@ -43,3 +50,5 @@ Subpattern mapping:
 - Mock mode is the test boundary. It exercises capability proof, backpressure,
   handoff state, publish drain, installer idempotence, and package generation
   without touching host services.
+- Home Assistant controls are allowlisted. Disable blocks new ingest while
+  leaving the MQTT bridge alive, and restart does not stop active rip jobs.

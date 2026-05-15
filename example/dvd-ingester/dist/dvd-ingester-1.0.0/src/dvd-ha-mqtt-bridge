@@ -1,0 +1,274 @@
+#!/bin/sh
+set -eu
+
+PROJECT="dvd-ingester"
+APPLY=0
+DISCOVER=0
+CONTROL=0
+ONCE=0
+
+usage() {
+  printf '%s\n' "Usage: dvd-ha-mqtt-bridge [--apply] [--discover] [--control] [--once]"
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --apply) APPLY=1 ;;
+    --discover) DISCOVER=1 ;;
+    --control) CONTROL=1 ;;
+    --once) ONCE=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf '%s\n' "unknown argument: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+if [ "$DISCOVER" = "0" ] && [ "$CONTROL" = "0" ] && [ "$ONCE" = "0" ]; then
+  ONCE=1
+fi
+
+if [ "$APPLY" = "1" ]; then
+  CONFIG_FILE="${CONFIG_FILE:-/etc/$PROJECT/$PROJECT.env}"
+  MQTT_CONFIG_FILE="${MQTT_CONFIG_FILE:-/etc/$PROJECT/$PROJECT.mqtt.env}"
+  if [ -f "$CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$CONFIG_FILE"
+  fi
+  if [ -f "$MQTT_CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$MQTT_CONFIG_FILE"
+  fi
+  STATE_DIR="${STATE_DIR:-/run/$PROJECT}"
+  HOT_DIR="${HOT_DIR:-/var/cache/$PROJECT/hot}"
+  DEST_DIR="${DEST_DIR:-/mnt/media/$PROJECT}"
+  VERSION_FILE="${VERSION_FILE:-/opt/$PROJECT/current/VERSION}"
+else
+  if [ -n "${CONFIG_FILE:-}" ] && [ -f "$CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$CONFIG_FILE"
+  fi
+  if [ -n "${MQTT_CONFIG_FILE:-}" ] && [ -f "$MQTT_CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$MQTT_CONFIG_FILE"
+  fi
+  MOCK_ROOT="${MUSTER_MOCK_ROOT:-${TMPDIR:-/tmp}/$PROJECT-mock}"
+  STATE_DIR="${STATE_DIR:-$MOCK_ROOT/run/$PROJECT}"
+  HOT_DIR="${HOT_DIR:-$MOCK_ROOT/var/cache/$PROJECT/hot}"
+  DEST_DIR="${DEST_DIR:-$MOCK_ROOT/mnt/$PROJECT}"
+  VERSION_FILE="${VERSION_FILE:-VERSION}"
+fi
+
+HA_MQTT_ENABLE="${HA_MQTT_ENABLE:-0}"
+MQTT_HOST="${MQTT_HOST:-127.0.0.1}"
+MQTT_PORT="${MQTT_PORT:-1883}"
+MQTT_USERNAME="${MQTT_USERNAME:-}"
+MQTT_PASSWORD="${MQTT_PASSWORD:-}"
+HA_DISCOVERY_PREFIX="${HA_DISCOVERY_PREFIX:-homeassistant}"
+HA_TOPIC_PREFIX="${HA_TOPIC_PREFIX:-muster/$PROJECT}"
+HA_NODE_ID="${HA_NODE_ID:-dvd_ingester}"
+HA_DEVICE_NAME="${HA_DEVICE_NAME:-dvd-ingester}"
+HA_MQTT_OUTBOX_DIR="${HA_MQTT_OUTBOX_DIR:-$STATE_DIR/ha-mqtt-outbox}"
+HA_MQTT_CONTROL_DIR="${HA_MQTT_CONTROL_DIR:-$STATE_DIR/ha-mqtt-control}"
+CONTROL_COMMAND="${CONTROL_COMMAND:-}"
+
+mkdir -p "$STATE_DIR" "$HA_MQTT_OUTBOX_DIR" "$HA_MQTT_CONTROL_DIR" "$HOT_DIR"
+if [ "$APPLY" != "1" ]; then
+  mkdir -p "$DEST_DIR"
+fi
+
+topic_file() {
+  printf '%s' "$1" | tr '/+' '__'
+}
+
+json_string() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+publish() {
+  topic="$1"
+  payload="$2"
+  retain="${3:-0}"
+  file="$HA_MQTT_OUTBOX_DIR/$(topic_file "$topic").json"
+  printf '%s\n' "$payload" > "$file"
+  printf '%s\t%s\tretain=%s\n' "$topic" "$file" "$retain" >> "$HA_MQTT_OUTBOX_DIR/topics.log"
+  if [ "$APPLY" = "1" ] && [ "$HA_MQTT_ENABLE" = "1" ] && command -v mosquitto_pub >/dev/null 2>&1; then
+    if [ -n "$MQTT_USERNAME" ]; then
+      if [ "$retain" = "1" ]; then
+        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USERNAME" -P "$MQTT_PASSWORD" -t "$topic" -m "$payload" -r || true
+      else
+        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USERNAME" -P "$MQTT_PASSWORD" -t "$topic" -m "$payload" || true
+      fi
+    elif [ "$retain" = "1" ]; then
+      mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -t "$topic" -m "$payload" -r || true
+    else
+      mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -t "$topic" -m "$payload" || true
+    fi
+  fi
+}
+
+field_from_json() {
+  key="$1"
+  file="$2"
+  default="$3"
+  if [ -f "$file" ]; then
+    value=$(sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$file" | head -n 1)
+    if [ -n "$value" ]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  fi
+  printf '%s\n' "$default"
+}
+
+number_from_json() {
+  key="$1"
+  file="$2"
+  default="$3"
+  if [ -f "$file" ]; then
+    value=$(sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p" "$file" | head -n 1)
+    if [ -n "$value" ]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  fi
+  printf '%s\n' "$default"
+}
+
+df_value() {
+  path="$1"
+  column="$2"
+  if [ -d "$path" ]; then
+    df -Pk "$path" | awk -v column="$column" 'NR == 2 {printf "%.0f\n", $column * 1024}'
+  else
+    printf '%s\n' 0
+  fi
+}
+
+count_titles() {
+  if [ -d "$DEST_DIR" ]; then
+    find "$DEST_DIR" -mindepth 1 -maxdepth 1 -type d ! -name '.incoming-*' | wc -l | tr -d ' '
+  else
+    printf '%s\n' 0
+  fi
+}
+
+state_rank() {
+  case "$1" in
+    failed) printf '%s\n' 3 ;;
+    degraded) printf '%s\n' 2 ;;
+    unknown) printf '%s\n' 1 ;;
+    healthy) printf '%s\n' 0 ;;
+    *) printf '%s\n' 1 ;;
+  esac
+}
+
+compute_health() {
+  if [ -f "$STATE_DIR/disabled" ]; then
+    printf '%s\n' disabled
+    return 0
+  fi
+  worst=0
+  for state in "$capability_state" "$hot_capacity_state" "$rip_state" "$publish_state"; do
+    rank=$(state_rank "$state")
+    if [ "$rank" -gt "$worst" ]; then
+      worst="$rank"
+    fi
+  done
+  case "$worst" in
+    3) printf '%s\n' failed ;;
+    2) printf '%s\n' degraded ;;
+    1) printf '%s\n' unknown ;;
+    *) printf '%s\n' healthy ;;
+  esac
+}
+
+publish_discovery() {
+  discovery_topic="$HA_DISCOVERY_PREFIX/device/$HA_NODE_ID/config"
+  availability_topic="$HA_TOPIC_PREFIX/availability"
+  state_topic="$HA_TOPIC_PREFIX/state"
+  enabled_state_topic="$HA_TOPIC_PREFIX/enabled/state"
+  enabled_command_topic="$HA_TOPIC_PREFIX/control/enabled/set"
+  restart_command_topic="$HA_TOPIC_PREFIX/control/restart/set"
+  payload=$(printf '{"device":{"identifiers":["%s"],"name":"%s"},"origin":{"name":"dvd-ingester","sw_version":"%s"},"availability":{"topic":"%s"},"components":{"health":{"platform":"sensor","name":"Health","unique_id":"%s_health","state_topic":"%s","value_template":"{{ value_json.health }}"},"rip_state":{"platform":"sensor","name":"Extraction Status","unique_id":"%s_rip_state","state_topic":"%s","value_template":"{{ value_json.extraction_status }}"},"conveyance_status":{"platform":"sensor","name":"Conveyance Status","unique_id":"%s_conveyance_status","state_topic":"%s","value_template":"{{ value_json.conveyance_status }}"},"local_used":{"platform":"sensor","name":"Local Used","unique_id":"%s_local_used","state_topic":"%s","value_template":"{{ value_json.local_dir_used_bytes }}","device_class":"data_size","unit_of_measurement":"B"},"nas_free":{"platform":"sensor","name":"NAS Free","unique_id":"%s_nas_free","state_topic":"%s","value_template":"{{ value_json.nas_dir_free_bytes }}","device_class":"data_size","unit_of_measurement":"B"},"extracted_titles":{"platform":"sensor","name":"Extracted Titles","unique_id":"%s_extracted_titles","state_topic":"%s","value_template":"{{ value_json.extracted_titles }}"},"restart_service":{"platform":"button","name":"Restart Service","unique_id":"%s_restart_service","command_topic":"%s","payload_press":"PRESS"},"enabled":{"platform":"switch","name":"Enabled","unique_id":"%s_enabled","state_topic":"%s","command_topic":"%s","payload_on":"ON","payload_off":"OFF"}}}' "$HA_NODE_ID" "$HA_DEVICE_NAME" "$version" "$availability_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$restart_command_topic" "$HA_NODE_ID" "$enabled_state_topic" "$enabled_command_topic")
+  publish "$discovery_topic" "$payload" 1
+}
+
+process_controls() {
+  control_bin="${CONTROL_COMMAND:-$(dirname "$0")/dvd-control}"
+  for command_file in "$HA_MQTT_CONTROL_DIR"/*.cmd; do
+    [ -e "$command_file" ] || continue
+    entity=$(basename "$command_file" .cmd)
+    command=$(sed -n '1p' "$command_file" | tr -d '\r\n')
+    case "$entity:$command" in
+      restart:PRESS|restart:RESTART)
+        if [ "$APPLY" = "1" ]; then
+          "$control_bin" --apply restart >/dev/null
+        else
+          "$control_bin" restart >/dev/null
+        fi
+        mv "$command_file" "$command_file.processed"
+        ;;
+      enabled:ON)
+        if [ "$APPLY" = "1" ]; then
+          "$control_bin" --apply enable >/dev/null
+        else
+          "$control_bin" enable >/dev/null
+        fi
+        mv "$command_file" "$command_file.processed"
+        ;;
+      enabled:OFF)
+        if [ "$APPLY" = "1" ]; then
+          "$control_bin" --apply disable >/dev/null
+        else
+          "$control_bin" disable >/dev/null
+        fi
+        mv "$command_file" "$command_file.processed"
+        ;;
+      *)
+        printf '%s\n' "rejected control payload: $entity=$command" >&2
+        mv "$command_file" "$command_file.rejected"
+        exit 1
+        ;;
+    esac
+  done
+}
+
+capability_state=$(field_from_json state "$STATE_DIR/capability.json" unknown)
+hot_capacity_state=$(field_from_json state "$STATE_DIR/hot-capacity.json" unknown)
+rip_state=$(field_from_json state "$STATE_DIR/rip.json" unknown)
+rip_reason=$(field_from_json reason "$STATE_DIR/rip.json" unknown)
+publish_state=$(field_from_json state "$STATE_DIR/publish.json" unknown)
+published_count=$(number_from_json published "$STATE_DIR/publish.json" 0)
+failed_count=$(number_from_json failed "$STATE_DIR/publish.json" 0)
+conveyance_status=$(field_from_json state "$STATE_DIR/handoff.json" "$publish_state")
+version=$(cat "$VERSION_FILE" 2>/dev/null || printf '%s\n' unknown)
+enabled=ON
+if [ -f "$STATE_DIR/disabled" ]; then
+  enabled=OFF
+fi
+
+local_free=$(df_value "$HOT_DIR" 4)
+local_total=$(df_value "$HOT_DIR" 2)
+local_used=$((local_total - local_free))
+nas_free=$(df_value "$DEST_DIR" 4)
+nas_total=$(df_value "$DEST_DIR" 2)
+nas_used=$((nas_total - nas_free))
+extracted_titles=$(count_titles)
+health=$(compute_health)
+
+state_payload=$(printf '{"health":"%s","enabled":"%s","version":"%s","extraction_status":"%s","extraction_reason":"%s","conveyance_status":"%s","capability_state":"%s","hot_capacity_state":"%s","publish_state":"%s","published_count":%s,"failed_count":%s,"local_dir_used_bytes":%s,"local_dir_free_bytes":%s,"local_dir_total_bytes":%s,"nas_dir_used_bytes":%s,"nas_dir_free_bytes":%s,"nas_dir_total_bytes":%s,"extracted_titles":%s}' "$(json_string "$health")" "$enabled" "$(json_string "$version")" "$(json_string "$rip_state")" "$(json_string "$rip_reason")" "$(json_string "$conveyance_status")" "$(json_string "$capability_state")" "$(json_string "$hot_capacity_state")" "$(json_string "$publish_state")" "$published_count" "$failed_count" "$local_used" "$local_free" "$local_total" "$nas_used" "$nas_free" "$nas_total" "$extracted_titles")
+
+if [ "$DISCOVER" = "1" ] || [ "$ONCE" = "1" ]; then
+  publish_discovery
+fi
+
+publish "$HA_TOPIC_PREFIX/availability" online 1
+publish "$HA_TOPIC_PREFIX/state" "$state_payload" 1
+publish "$HA_TOPIC_PREFIX/enabled/state" "$enabled" 1
+printf '%s\n' "$state_payload" > "$STATE_DIR/ha-mqtt-state.json"
+
+if [ "$CONTROL" = "1" ] || [ "$ONCE" = "1" ]; then
+  process_controls
+fi
+
+printf '%s\n' "ok: $PROJECT Home Assistant MQTT bridge updated"

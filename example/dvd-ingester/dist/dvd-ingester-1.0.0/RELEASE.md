@@ -1,5 +1,16 @@
 # dvd-ingester Release Notes
 
+## 1.0.0
+
+- Added Home Assistant MQTT discovery and state publishing through
+  `T2R6.home-assistant-mqtt-bridge`.
+- Added scoped controls for restart and enable/disable without stopping active
+  `dvd-rip@*.service` jobs.
+- Added separate `/etc/dvd-ingester/dvd-ingester.mqtt.env` defaults so broker
+  credentials are not mixed into the general appliance config.
+- Added mock tests for discovery payloads, state aggregation, and rejected
+  command payloads.
+
 ## 0.4.0
 
 - Reimplemented the example from scratch around

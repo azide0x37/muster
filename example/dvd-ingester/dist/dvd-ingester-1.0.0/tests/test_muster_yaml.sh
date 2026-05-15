@@ -10,7 +10,8 @@ for required in \
   "update_polling: systemd-timer" \
   "required_tool: uv" \
   "primary: T2R4.device-triggered-conveyor" \
-  "verified_head: 309eb158a8f0e3c75187e4ad42a0809780320747" \
+  "T2R6.home-assistant-mqtt-bridge" \
+  "verified_head: 279573b65c7c72e6b3d4fb96e9d69edfc7f86aaf" \
   "C6.lifecycle-capsule" \
   "R5.capability-mount" \
   "T2C1.hot-cold-nas-conveyor"

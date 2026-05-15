@@ -15,8 +15,10 @@ for required in \
   "tests runnable" \
   "MPL pattern mapping documented" \
   "T2R4.device-triggered-conveyor" \
+  "T2R6.home-assistant-mqtt-bridge" \
   "R5.capability-mount" \
   "T2C1.hot-cold-nas-conveyor" \
+  "Home Assistant bridge exists" \
   "Known Limits"
 do
   grep -q "$required" README.md

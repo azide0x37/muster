@@ -38,7 +38,7 @@ sha256_file() {
 restart_timers() {
   if [ -z "$ROOT" ] && command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload
-    systemctl restart dvd-publish-one.timer dvd-ingester-doctor.timer dvd-ingester-update.timer || true
+    systemctl restart dvd-publish-one.timer dvd-ingester-doctor.timer dvd-ingester-update.timer dvd-ingester-ha-mqtt.timer || true
   fi
 }
 

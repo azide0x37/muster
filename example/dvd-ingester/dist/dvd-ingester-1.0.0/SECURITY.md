@@ -8,6 +8,8 @@ and high-volume filesystem writes.
 - udev only asks systemd to start `dvd-rip@%k.service`.
 - Ripping and publishing run from `/opt/dvd-ingester/current/bin`.
 - Configuration is preserved under `/etc/dvd-ingester/`.
+- MQTT broker settings live in `/etc/dvd-ingester/dvd-ingester.mqtt.env`,
+  installed with `0600` permissions.
 - Runtime state is written under `/run/dvd-ingester`.
 - Hot local payloads are written under `/var/cache/dvd-ingester/hot`.
 - Apply mode proves that the cold destination is writable and, when `findmnt`
@@ -23,3 +25,6 @@ and high-volume filesystem writes.
   `makemkvcon` behavior is not sufficient.
 - Updates use a release manifest and SHA256 verification before switching the
   `/opt/dvd-ingester/current` symlink.
+- MQTT command payloads are not shell commands. They map only to explicit
+  restart and enable/disable controls, and disable keeps the bridge available
+  for re-enable.

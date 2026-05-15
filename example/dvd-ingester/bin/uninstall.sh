@@ -19,8 +19,9 @@ if [ -z "$ROOT" ] && [ "$(id -u)" -ne 0 ]; then
 fi
 
 if [ -z "$ROOT" ] && command -v systemctl >/dev/null 2>&1; then
-  systemctl disable --now dvd-publish-one.timer dvd-ingester-doctor.timer dvd-ingester-update.timer || true
-  systemctl stop 'dvd-rip@*.service' dvd-publish-one.service dvd-ingester-doctor.service dvd-ingester-update.service || true
+  systemctl disable --now dvd-publish-one.timer dvd-ingester-doctor.timer dvd-ingester-update.timer dvd-ingester-ha-mqtt.timer || true
+  systemctl stop 'dvd-rip@*.service' dvd-publish-one.service dvd-ingester-doctor.service dvd-ingester-update.service dvd-ingester-ha-mqtt.service || true
+  systemctl unmask dvd-rip@.service || true
 fi
 
 rm -f "$SYSTEMD_DIR/dvd-rip@.service"
@@ -30,6 +31,8 @@ rm -f "$SYSTEMD_DIR/dvd-ingester-doctor.service"
 rm -f "$SYSTEMD_DIR/dvd-ingester-doctor.timer"
 rm -f "$SYSTEMD_DIR/dvd-ingester-update.service"
 rm -f "$SYSTEMD_DIR/dvd-ingester-update.timer"
+rm -f "$SYSTEMD_DIR/dvd-ingester-ha-mqtt.service"
+rm -f "$SYSTEMD_DIR/dvd-ingester-ha-mqtt.timer"
 rm -f "$UDEV_DIR/90-dvd-ingester.rules"
 rm -rf "$INSTALL_DIR"
 

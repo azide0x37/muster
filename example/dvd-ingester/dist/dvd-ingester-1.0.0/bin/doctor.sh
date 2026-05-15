@@ -34,8 +34,12 @@ check_files() {
   test -f "$SRC_ROOT/systemd/dvd-rip@.service"
   test -f "$SRC_ROOT/systemd/dvd-publish-one.service"
   test -f "$SRC_ROOT/systemd/dvd-publish-one.timer"
+  test -f "$SRC_ROOT/systemd/dvd-ingester-ha-mqtt.service"
+  test -f "$SRC_ROOT/systemd/dvd-ingester-ha-mqtt.timer"
   test -x "$RIP_SCRIPT"
   test -x "$PUBLISH_SCRIPT"
+  test -x "$SRC_ROOT/src/dvd-control" || test -x "$SCRIPT_DIR/dvd-control"
+  test -x "$SRC_ROOT/src/dvd-ha-mqtt-bridge" || test -x "$SCRIPT_DIR/dvd-ha-mqtt-bridge"
   grep -q 'SYSTEMD_WANTS' "$SRC_ROOT/udev/90-dvd-ingester.rules"
 }
 
@@ -64,6 +68,19 @@ check_mock_flow() {
   MUSTER_MOCK_ROOT="$MOCK_ROOT" "$PUBLISH_SCRIPT" --once >/dev/null
   test -s "$MOCK_ROOT/run/dvd-ingester/publish.json"
   grep -q '"published":1' "$MOCK_ROOT/run/dvd-ingester/publish.json"
+
+  bridge_script="$SRC_ROOT/src/dvd-ha-mqtt-bridge"
+  control_script="$SRC_ROOT/src/dvd-control"
+  if [ ! -x "$bridge_script" ]; then
+    bridge_script="$SCRIPT_DIR/dvd-ha-mqtt-bridge"
+    control_script="$SCRIPT_DIR/dvd-control"
+  fi
+  MUSTER_MOCK_ROOT="$MOCK_ROOT" "$bridge_script" --once >/dev/null
+  test -s "$MOCK_ROOT/run/dvd-ingester/ha-mqtt-state.json"
+  grep -q '"restart_service"' "$MOCK_ROOT/run/dvd-ingester/ha-mqtt-outbox/homeassistant_device_dvd_ingester_config.json"
+  printf '%s\n' "OFF" > "$MOCK_ROOT/run/dvd-ingester/ha-mqtt-control/enabled.cmd"
+  MUSTER_MOCK_ROOT="$MOCK_ROOT" CONTROL_COMMAND="$control_script" "$bridge_script" --control >/dev/null
+  grep -q '"enabled":"OFF"' "$MOCK_ROOT/run/dvd-ingester/control.json"
 }
 
 check_files

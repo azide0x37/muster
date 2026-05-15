@@ -8,6 +8,8 @@ It implements the Muster Pattern Library
 ingest job, the job proves cold storage, waits for hot-storage capacity, stages
 local work, and hands completed output to a timer-driven hot/cold conveyor.
 In this implementation, udev only asks systemd to start the bounded service.
+It also implements `T2R6.home-assistant-mqtt-bridge` as an optional local
+Home Assistant MQTT discovery, telemetry, and scoped-control bridge.
 
 ## Architecture
 
@@ -31,6 +33,7 @@ DVD media becomes ready
 | Repeated drain, doctor, and update checks | `C2.persistent-tick`, `T2C3.scheduled-herald` | `systemd/*.timer` |
 | Degraded and failed states remain inspectable | `C5.failure-ratchet` | JSON state files under `STATE_DIR` |
 | Install, update, uninstall, package lifecycle | `C6.lifecycle-capsule` | `bin/*.sh`, `Makefile`, `dist/manifest.json` |
+| Home Assistant discovery and controls | `T2R6.home-assistant-mqtt-bridge` | `src/dvd-ha-mqtt-bridge`, `src/dvd-control`, `systemd/dvd-ingester-ha-mqtt.*` |
 
 ## Install
 
@@ -76,6 +79,22 @@ The installer creates `/etc/dvd-ingester/dvd-ingester.env` from
 `dvdbackup` first, then `makemkvcon`. Mock mode writes a small payload for
 tests.
 
+The installer also creates `/etc/dvd-ingester/dvd-ingester.mqtt.env` with mode
+`0600`. MQTT is disabled by default:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `HA_MQTT_ENABLE` | `0` | Set to `1` to publish with `mosquitto_pub` when available |
+| `MQTT_HOST` | `127.0.0.1` | MQTT broker host |
+| `MQTT_PORT` | `1883` | MQTT broker port |
+| `MQTT_USERNAME` | empty | Optional MQTT username |
+| `MQTT_PASSWORD` | empty | Optional MQTT password |
+| `HA_DISCOVERY_PREFIX` | `homeassistant` | Home Assistant discovery prefix |
+| `HA_TOPIC_PREFIX` | `muster/dvd-ingester` | State and command topic prefix |
+
+When MQTT is disabled or no broker tools are installed, the bridge still writes
+mockable payloads under `STATE_DIR/ha-mqtt-outbox`.
+
 ## systemd Units
 
 | Unit | Purpose |
@@ -87,6 +106,8 @@ tests.
 | `dvd-ingester-doctor.timer` | Periodic health check |
 | `dvd-ingester-update.service` | Release manifest update check |
 | `dvd-ingester-update.timer` | Periodic update polling |
+| `dvd-ingester-ha-mqtt.service` | Publish Home Assistant discovery/state and process scoped controls |
+| `dvd-ingester-ha-mqtt.timer` | Periodic Home Assistant bridge refresh |
 
 ## Operations
 
@@ -108,6 +129,19 @@ Inspect the latest runtime states:
 sudo ls -l /run/dvd-ingester
 sudo cat /run/dvd-ingester/rip.json
 sudo cat /run/dvd-ingester/publish.json
+sudo cat /run/dvd-ingester/ha-mqtt-state.json
+```
+
+Refresh Home Assistant state manually:
+
+```sh
+sudo systemctl start dvd-ingester-ha-mqtt.service
+```
+
+Disable new ingest without stopping the bridge:
+
+```sh
+sudo /opt/dvd-ingester/current/bin/dvd-control --apply disable
 ```
 
 Watch logs:
@@ -150,6 +184,9 @@ installer idempotence. It does not require a DVD drive or a mounted NAS.
 - The publish drain copies to a destination-side temporary directory before the
   final rename. It is atomic for readers of final output, but interrupted
   copies may leave `.incoming-*` directories for inspection.
+- MQTT command handling is deliberately narrow. Restart does not stop active
+  `dvd-rip@*.service` jobs, and disable leaves the Home Assistant bridge alive
+  so it can be re-enabled.
 
 ## Muster Self-Certification
 
@@ -169,4 +206,5 @@ installer idempotence. It does not require a DVD drive or a mounted NAS.
 | systemd units verify when available | PASS | `tests/test_units.sh` runs `systemd-analyze verify` when installed |
 | installer preserves config | PASS | staged idempotence test appends and rechecks config |
 | generated instructions avoid unmanaged files | PASS | only `/etc/dvd-ingester/dvd-ingester.env` is operator-edited |
-| MPL pattern mapping documented | PASS | README, `MUSTER.md`, and `muster.yaml` name `T2R4.device-triggered-conveyor` |
+| Home Assistant bridge exists | PASS | `T2R6.home-assistant-mqtt-bridge`, `dvd-ingester-ha-mqtt.service`, `tests/test_ha_mqtt_bridge.sh` |
+| MPL pattern mapping documented | PASS | README, `MUSTER.md`, and `muster.yaml` name `T2R4.device-triggered-conveyor` and `T2R6.home-assistant-mqtt-bridge` |
