@@ -14,6 +14,7 @@ test:
 	./tests/test_units.sh
 	./tests/test_udev_rule.sh
 	./tests/test_installer_idempotent.sh
+	./tests/test_update_doctor_logging.sh
 	./tests/test_conveyor_flow.sh
 	./tests/test_ha_mqtt_bridge.sh
 	./tests/test_readme_compliance.sh

@@ -1,6 +1,6 @@
 # dvd-ingester
 
-Current release: 1.0.2
+Current release: 1.0.3
 
 `dvd-ingester` is a Muster example repo for a Raspberry Pi OS or Debian box with
 a USB optical drive and a mounted media destination.
@@ -214,8 +214,8 @@ attribute list limit is `50` entries and can be changed with
 unpacks the new release under `/opt/dvd-ingester/releases/<version>`, switches
 `/opt/dvd-ingester/current`, restarts timers, and runs `doctor.sh`.
 
-If the doctor check fails, the updater restores the previous `current` symlink
-and restarts the timers again.
+If the doctor check fails, the updater logs the captured doctor stdout/stderr,
+restores the previous `current` symlink, and restarts the timers again.
 
 ## Adjacent Systems
 
