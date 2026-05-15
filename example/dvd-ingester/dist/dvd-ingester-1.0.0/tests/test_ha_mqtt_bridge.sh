@@ -22,6 +22,10 @@ DISCOVERY="$ROOT/run/dvd-ingester/ha-mqtt-outbox/homeassistant_device_dvd_ingest
 test -s "$DISCOVERY"
 grep -q '"restart_service"' "$DISCOVERY"
 grep -q '"enabled"' "$DISCOVERY"
+grep -q '"local_free"' "$DISCOVERY"
+grep -q '"nas_total"' "$DISCOVERY"
+grep -q '"unit_of_measurement":"GiB"' "$DISCOVERY"
+grep -q '"state_class":"measurement"' "$DISCOVERY"
 grep -q 'muster/dvd-ingester/control/restart/set' "$DISCOVERY"
 grep -q 'muster/dvd-ingester/control/enabled/set' "$DISCOVERY"
 
@@ -42,3 +46,25 @@ if MUSTER_MOCK_ROOT="$ROOT" ./src/dvd-ha-mqtt-bridge --control >"$ROOT/reject.ou
   exit 1
 fi
 test -f "$ROOT/run/dvd-ingester/ha-mqtt-control/enabled.cmd.rejected"
+
+cat > "$ROOT/apply.env" <<EOF
+STATE_DIR=$ROOT/run/dvd-ingester
+HOT_DIR=$ROOT/var/cache/dvd-ingester/hot
+DEST_DIR=$ROOT/mnt/dvd-ingester
+VERSION_FILE=$ROOT/version
+EOF
+printf '%s\n' "1.0.0" > "$ROOT/version"
+cat > "$ROOT/mqtt.env" <<EOF
+HA_MQTT_ENABLE=1
+MQTT_HOST=127.0.0.1
+MQTT_PORT=1883
+EOF
+
+if CONFIG_FILE="$ROOT/apply.env" MQTT_CONFIG_FILE="$ROOT/mqtt.env" MOSQUITTO_PUB="$ROOT/missing-mosquitto-pub" ./src/dvd-ha-mqtt-bridge --apply --once >"$ROOT/mqtt-missing.out" 2>"$ROOT/mqtt-missing.err"; then
+  echo "missing mosquitto_pub did not fail an enabled MQTT run" >&2
+  exit 1
+fi
+grep -q "mqtt publish failed" "$ROOT/mqtt-missing.err"
+test -s "$ROOT/run/dvd-ingester/ha-mqtt-state.json"
+grep -q '"local_dir_used_gib":' "$ROOT/run/dvd-ingester/ha-mqtt-state.json"
+grep -q '"nas_dir_free_gib":' "$ROOT/run/dvd-ingester/ha-mqtt-state.json"

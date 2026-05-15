@@ -91,11 +91,15 @@ The installer also creates `/etc/dvd-ingester/dvd-ingester.mqtt.env` with mode
 | `MQTT_PORT` | `1883` | MQTT broker port |
 | `MQTT_USERNAME` | empty | Optional MQTT username |
 | `MQTT_PASSWORD` | empty | Optional MQTT password |
+| `MQTT_PUBLISH_TIMEOUT_SECONDS` | `5` | Per-message MQTT publish timeout when `timeout(1)` is available |
 | `HA_DISCOVERY_PREFIX` | `homeassistant` | Home Assistant discovery prefix |
 | `HA_TOPIC_PREFIX` | `muster/dvd-ingester` | State and command topic prefix |
 
 When MQTT is disabled or no broker tools are installed, the bridge still writes
 mockable payloads under `STATE_DIR/ha-mqtt-outbox`.
+When `HA_MQTT_ENABLE=1`, `mosquitto_pub` must be installed and able to reach the
+configured broker. Publish failures make `dvd-ingester-ha-mqtt.service` fail so
+the journal shows a real delivery problem instead of a false success.
 
 ## systemd Units
 
@@ -183,8 +187,8 @@ operator decisions for this appliance:
 | Rip state | Shows active or latest extraction state |
 | Publish state | Shows conveyor handoff and cold-destination publish state |
 | Hot capacity | Reports local hot-cache capacity pressure |
-| Local storage | Reports local working directory usage when available |
-| Destination storage | Reports mounted destination usage when available |
+| Local storage | Reports local hot-cache used, free, and total capacity in GiB |
+| Destination storage | Reports mounted destination used, free, and total capacity in GiB |
 | Extracted title count | Counts completed title directories in the latest state |
 | Version | Reports the installed `dvd-ingester` version |
 | Update state | Reports update timer/check state when present |

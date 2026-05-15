@@ -132,6 +132,7 @@ install_config() {
       printf 'MQTT_PORT=1883\n'
       printf 'MQTT_USERNAME=\n'
       printf 'MQTT_PASSWORD=\n'
+      printf 'MQTT_PUBLISH_TIMEOUT_SECONDS=5\n'
       printf 'HA_DISCOVERY_PREFIX=homeassistant\n'
       printf 'HA_TOPIC_PREFIX=muster/dvd-ingester\n'
       printf 'HA_NODE_ID=dvd_ingester\n'
