@@ -14,6 +14,8 @@ This file is generated from `RELEASE.md`. Update release notes first, then run `
   command payloads.
 - Restored disc-title output directory names in the hot/cold conveyor, using
   `<disc-title>_<fingerprint>` instead of device/timestamp run names.
+- Eject completed discs before the slower hot/cold handoff so operators can
+  swap media without waiting for archive movement.
 
 ## 0.4.0
 

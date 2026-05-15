@@ -51,6 +51,7 @@ CAPACITY_INTERVAL_SECONDS="${CAPACITY_INTERVAL_SECONDS:-5}"
 RIP_COMMAND="${RIP_COMMAND:-}"
 EJECT_AFTER_RIP="${EJECT_AFTER_RIP:-1}"
 ALLOW_UNMOUNTED_DEST="${ALLOW_UNMOUNTED_DEST:-0}"
+EJECT_ATTEMPTED=0
 
 if [ -z "${DRAIN_COMMAND:-}" ] && [ "$APPLY" = "1" ]; then
   DRAIN_COMMAND="/opt/$PROJECT/current/bin/dvd-publish-one --apply --once"
@@ -252,6 +253,10 @@ handoff_to_hot() {
 }
 
 eject_device() {
+  if [ "$EJECT_ATTEMPTED" = "1" ]; then
+    return 0
+  fi
+  EJECT_ATTEMPTED=1
   if [ "$APPLY" != "1" ] || [ "$EJECT_AFTER_RIP" != "1" ]; then
     return 0
   fi
@@ -308,8 +313,8 @@ if ! run_ingest; then
   exit 1
 fi
 
+eject_device
 handoff_to_hot
 write_state rip.json healthy ready_for_cold_publish
-eject_device
 
 printf '%s\n' "ok: $PROJECT staged $RUN_ID"
