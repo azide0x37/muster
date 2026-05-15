@@ -7,6 +7,11 @@ This repository implements the Muster service repo pattern. Future Codex runs ma
 - `make test` passes, or each failure is explicitly documented with the unsupported local dependency or environment constraint.
 - systemd units verify with `systemd-analyze verify` when that command is available.
 - `README.md` contains an up-to-date Muster self-certification table.
+- every README touched by the change has been reviewed and updated before push
+  when install, config, controls, release, packaging, pattern mapping, or
+  operator-facing behavior has changed.
+- implementation repositories with release notes include a `CHANGELOG.md`
+  generated from `RELEASE.md` or equivalent release notes before push.
 - release artifact generation through `make package` has been tested.
 - installer idempotence has been considered and tested through a staged root or equivalent.
 - generated instructions do not tell users to edit unmanaged files outside the repo without explaining how the installer owns or preserves them.

@@ -19,6 +19,8 @@ for required in \
   "R5.capability-mount" \
   "T2C1.hot-cold-nas-conveyor" \
   "Home Assistant bridge exists" \
+  "Home Assistant Entities" \
+  "Release Documentation Cycle" \
   "Known Limits"
 do
   grep -q "$required" README.md

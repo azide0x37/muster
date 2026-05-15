@@ -1,5 +1,7 @@
 # dvd-ingester
 
+Current release: 1.0.0
+
 `dvd-ingester` is a Muster example repo for a Raspberry Pi OS or Debian box with
 a USB optical drive and a mounted media destination.
 
@@ -144,11 +146,50 @@ Disable new ingest without stopping the bridge:
 sudo /opt/dvd-ingester/current/bin/dvd-control --apply disable
 ```
 
+Enable new ingest again:
+
+```sh
+sudo /opt/dvd-ingester/current/bin/dvd-control --apply enable
+```
+
+Restart owned background services without stopping active rip jobs:
+
+```sh
+sudo /opt/dvd-ingester/current/bin/dvd-control --apply restart
+```
+
+Inspect the Home Assistant bridge status payload:
+
+```sh
+sudo /opt/dvd-ingester/current/bin/dvd-control --apply status
+```
+
 Watch logs:
 
 ```sh
 journalctl -u 'dvd-rip@*' -u dvd-publish-one.service -f
 ```
+
+## Home Assistant Entities
+
+When `HA_MQTT_ENABLE=1`, the bridge publishes a Home Assistant MQTT device
+discovery payload and appliance state. The entity set is intentionally scoped to
+operator decisions for this appliance:
+
+| Entity | Purpose |
+| --- | --- |
+| Availability | Shows whether the bridge can publish current state |
+| Health status | Summarizes doctor, rip, publish, and maintenance state |
+| Rip state | Shows active or latest extraction state |
+| Publish state | Shows conveyor handoff and cold-destination publish state |
+| Hot capacity | Reports local hot-cache capacity pressure |
+| Local storage | Reports local working directory usage when available |
+| Destination storage | Reports mounted destination usage when available |
+| Extracted title count | Counts completed title directories in the latest state |
+| Version | Reports the installed `dvd-ingester` version |
+| Update state | Reports update timer/check state when present |
+| Restart button | Restarts owned background services without stopping active rip jobs |
+| Enabled switch | Blocks or restores new ingest while leaving the bridge online |
 
 ## Update And Rollback
 
@@ -175,6 +216,18 @@ make package
 
 The test suite uses mock mode for the conveyor flow and staged roots for
 installer idempotence. It does not require a DVD drive or a mounted NAS.
+
+## Release Documentation Cycle
+
+Every push that changes behavior, config, controls, units, packaging, or release
+assets must refresh the operator-facing docs before it is considered complete:
+
+1. Update `README.md` so install, config, operations, Home Assistant entities,
+   self-certification, and known limits match the implementation.
+2. Update `RELEASE.md` with the release-facing change notes.
+3. Run `make changelog` to regenerate `CHANGELOG.md` from `RELEASE.md`.
+4. Run `make test` and `make package`; both verify that the README and
+   generated changelog are current enough to ship.
 
 ## Known Limits
 
