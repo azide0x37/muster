@@ -186,8 +186,11 @@ operator decisions for this appliance:
 | --- | --- |
 | Availability | Shows whether the bridge can publish current state |
 | Health status | Summarizes doctor, rip, publish, and maintenance state |
+| Disk state | Reports whether the configured optical device is loaded, busy, missing, or has no media |
 | Rip state | Shows active or latest extraction state |
+| Extraction progress | Reports current rip bytes against the disc size from metadata as a percentage |
 | Publish state | Shows conveyor handoff and cold-destination publish state |
+| Conveyance progress | Reports active NAS publish bytes against the hot source size as a percentage |
 | Capability and capacity state | Reports destination mount/write health and local hot-cache capacity pressure |
 | Local storage | Reports local hot-cache used, free, and total capacity in GiB |
 | Destination storage | Reports mounted destination used, free, and total capacity in GiB |

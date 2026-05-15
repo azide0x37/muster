@@ -22,6 +22,10 @@
   attributes.
 - Added diagnostic Home Assistant entities for capability state, hot-capacity
   state, publish state, publish counts, and installed version.
+- Added Home Assistant MQTT disk state plus extraction and conveyance progress
+  sensors. Extraction progress compares current run bytes with disc size;
+  conveyance progress compares active incoming publish bytes with hot source
+  size.
 
 ## 0.4.0
 

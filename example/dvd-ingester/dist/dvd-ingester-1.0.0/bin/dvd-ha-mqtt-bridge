@@ -70,6 +70,8 @@ HA_DISCOVERY_PREFIX="${HA_DISCOVERY_PREFIX:-homeassistant}"
 HA_TOPIC_PREFIX="${HA_TOPIC_PREFIX:-muster/$PROJECT}"
 HA_NODE_ID="${HA_NODE_ID:-dvd_ingester}"
 HA_DEVICE_NAME="${HA_DEVICE_NAME:-dvd-ingester}"
+DISC_DEVICE="${DISC_DEVICE:-/dev/sr0}"
+DISK_PROBE_TIMEOUT_SECONDS="${DISK_PROBE_TIMEOUT_SECONDS:-2}"
 HA_MQTT_OUTBOX_DIR="${HA_MQTT_OUTBOX_DIR:-$STATE_DIR/ha-mqtt-outbox}"
 HA_MQTT_CONTROL_DIR="${HA_MQTT_CONTROL_DIR:-$STATE_DIR/ha-mqtt-control}"
 HA_FOLDER_INDEX_LIMIT="${HA_FOLDER_INDEX_LIMIT:-50}"
@@ -261,6 +263,62 @@ folder_attributes_payload() {
     "$(json_string "$path")" "$bytes" "$count" "$HA_FOLDER_INDEX_LIMIT" "$entries"
 }
 
+percent_value() {
+  current="$1"
+  total="$2"
+  awk -v current="$current" -v total="$total" 'BEGIN {
+    if (total <= 0) {
+      printf "0.0\n"
+      exit
+    }
+    pct = (current / total) * 100
+    if (pct < 0) pct = 0
+    if (pct > 100) pct = 100
+    printf "%.1f\n", pct
+  }'
+}
+
+first_matching_dir() {
+  path="$1"
+  name_pattern="$2"
+  if [ -d "$path" ]; then
+    find "$path" -mindepth 1 -maxdepth 1 -type d -name "$name_pattern" -print 2>/dev/null | sort | head -n 1
+  fi
+}
+
+probe_disk_identity() {
+  if command -v blkid >/dev/null 2>&1; then
+    if command -v timeout >/dev/null 2>&1; then
+      timeout "$DISK_PROBE_TIMEOUT_SECONDS" blkid "$DISC_DEVICE" >/dev/null 2>&1
+    else
+      blkid "$DISC_DEVICE" >/dev/null 2>&1
+    fi
+  else
+    test -e "$DISC_DEVICE"
+  fi
+}
+
+disk_state_value() {
+  if [ "$rip_state" = "active" ] || [ "$rip_state" = "activating" ]; then
+    printf '%s\n' loaded
+    return 0
+  fi
+  if [ ! -e "$DISC_DEVICE" ]; then
+    printf '%s\n' missing_device
+    return 0
+  fi
+  if probe_disk_identity; then
+    printf '%s\n' loaded
+    return 0
+  fi
+  code=$?
+  if [ "$code" = "124" ]; then
+    printf '%s\n' busy
+  else
+    printf '%s\n' no_media
+  fi
+}
+
 state_rank() {
   case "$1" in
     failed) printf '%s\n' 3 ;;
@@ -306,6 +364,9 @@ publish_discovery() {
 EOF
 )
   publish "$discovery_topic" "$payload" 1
+  publish "$HA_DISCOVERY_PREFIX/sensor/${HA_NODE_ID}_disk_state/config" "$(printf '{"name":"Disk State","unique_id":"%s_disk_state","state_topic":"%s","value_template":"{{ value_json.disk_state }}","icon":"mdi:disc","device":{"identifiers":["%s"],"name":"%s"},"origin":{"name":"dvd-ingester","sw_version":"%s"},"availability":{"topic":"%s"}}' "$(json_string "$HA_NODE_ID")" "$(json_string "$state_topic")" "$(json_string "$HA_NODE_ID")" "$(json_string "$HA_DEVICE_NAME")" "$(json_string "$version")" "$(json_string "$availability_topic")")" 1
+  publish "$HA_DISCOVERY_PREFIX/sensor/${HA_NODE_ID}_extraction_progress/config" "$(printf '{"name":"Extraction Progress","unique_id":"%s_extraction_progress","state_topic":"%s","value_template":"{{ value_json.extraction_progress_percent }}","unit_of_measurement":"%%","state_class":"measurement","icon":"mdi:progress-clock","suggested_display_precision":1,"device":{"identifiers":["%s"],"name":"%s"},"origin":{"name":"dvd-ingester","sw_version":"%s"},"availability":{"topic":"%s"}}' "$(json_string "$HA_NODE_ID")" "$(json_string "$state_topic")" "$(json_string "$HA_NODE_ID")" "$(json_string "$HA_DEVICE_NAME")" "$(json_string "$version")" "$(json_string "$availability_topic")")" 1
+  publish "$HA_DISCOVERY_PREFIX/sensor/${HA_NODE_ID}_conveyance_progress/config" "$(printf '{"name":"Conveyance Progress","unique_id":"%s_conveyance_progress","state_topic":"%s","value_template":"{{ value_json.conveyance_progress_percent }}","unit_of_measurement":"%%","state_class":"measurement","icon":"mdi:progress-upload","suggested_display_precision":1,"device":{"identifiers":["%s"],"name":"%s"},"origin":{"name":"dvd-ingester","sw_version":"%s"},"availability":{"topic":"%s"}}' "$(json_string "$HA_NODE_ID")" "$(json_string "$state_topic")" "$(json_string "$HA_NODE_ID")" "$(json_string "$HA_DEVICE_NAME")" "$(json_string "$version")" "$(json_string "$availability_topic")")" 1
 }
 
 process_controls() {
@@ -386,6 +447,48 @@ nas_entries=$(folder_entries_json "$DEST_DIR" 1 "$HA_FOLDER_INDEX_LIMIT")
 work_attrs_payload=$(folder_attributes_payload "$WORK_DIR" 0 "$work_dir_items" "$work_dir_bytes" "$work_entries")
 hot_attrs_payload=$(folder_attributes_payload "$HOT_DIR" 0 "$hot_dir_items" "$hot_dir_bytes" "$hot_entries")
 nas_attrs_payload=$(folder_attributes_payload "$DEST_DIR" 1 "$extracted_titles" "$nas_dir_bytes" "$nas_entries")
+current_run_id=$(field_from_json run_id "$STATE_DIR/rip.json" "")
+handoff_run_id=$(field_from_json run_id "$STATE_DIR/handoff.json" "$current_run_id")
+current_run_dir=""
+current_run_bytes=0
+current_disc_size=0
+if [ -n "$current_run_id" ]; then
+  current_run_dir=$(first_matching_dir "$WORK_DIR" "$current_run_id.work.*" | head -n 1)
+fi
+if [ -n "$current_run_dir" ] && [ -d "$current_run_dir" ]; then
+  current_run_bytes=$(folder_bytes "$current_run_dir")
+  current_disc_size=$(field_from_json size "$current_run_dir/metadata.json" 0)
+fi
+case "$current_disc_size" in
+  ''|*[!0-9]*) current_disc_size=0 ;;
+esac
+if [ "$rip_state" = "active" ] || [ "$rip_state" = "activating" ]; then
+  extraction_progress_percent=$(percent_value "$current_run_bytes" "$current_disc_size")
+elif [ "$rip_state" = "healthy" ] && [ "$rip_reason" = "ready_for_cold_publish" ]; then
+  extraction_progress_percent=100.0
+else
+  extraction_progress_percent=0.0
+fi
+
+incoming_dir=""
+hot_source_bytes=0
+incoming_bytes=0
+if [ -n "$handoff_run_id" ]; then
+  incoming_dir=$(first_matching_dir "$DEST_DIR" ".incoming-$handoff_run_id-*" | head -n 1)
+  if [ -d "$HOT_DIR/$handoff_run_id" ]; then
+    hot_source_bytes=$(folder_bytes "$HOT_DIR/$handoff_run_id")
+  fi
+fi
+if [ -n "$incoming_dir" ] && [ -d "$incoming_dir" ]; then
+  incoming_bytes=$(folder_bytes "$incoming_dir")
+  conveyance_progress_percent=$(percent_value "$incoming_bytes" "$hot_source_bytes")
+elif [ "$conveyance_status" = "waiting_for_extraction" ]; then
+  conveyance_progress_percent=0.0
+elif [ -n "$handoff_run_id" ] && [ -d "$DEST_DIR/$handoff_run_id" ]; then
+  conveyance_progress_percent=100.0
+else
+  conveyance_progress_percent=0.0
+fi
 
 if [ ! -f "$STATE_DIR/capability.json" ]; then
   if [ -d "$DEST_DIR" ]; then
@@ -412,9 +515,10 @@ if [ ! -f "$STATE_DIR/handoff.json" ]; then
   conveyance_status="$publish_state"
 fi
 
+disk_state=$(disk_state_value)
 health=$(compute_health)
 
-state_payload=$(printf '{"health":"%s","enabled":"%s","version":"%s","extraction_status":"%s","extraction_reason":"%s","conveyance_status":"%s","capability_state":"%s","hot_capacity_state":"%s","publish_state":"%s","published_count":%s,"failed_count":%s,"local_dir_used_bytes":%s,"local_dir_free_bytes":%s,"local_dir_total_bytes":%s,"local_dir_used_gib":%s,"local_dir_free_gib":%s,"local_dir_total_gib":%s,"nas_dir_used_bytes":%s,"nas_dir_free_bytes":%s,"nas_dir_total_bytes":%s,"nas_dir_used_gib":%s,"nas_dir_free_gib":%s,"nas_dir_total_gib":%s,"work_dir_items":%s,"work_dir_bytes":%s,"hot_dir_items":%s,"hot_dir_bytes":%s,"extracted_titles":%s,"nas_dir_bytes":%s}' "$(json_string "$health")" "$enabled" "$(json_string "$version")" "$(json_string "$rip_state")" "$(json_string "$rip_reason")" "$(json_string "$conveyance_status")" "$(json_string "$capability_state")" "$(json_string "$hot_capacity_state")" "$(json_string "$publish_state")" "$published_count" "$failed_count" "$local_used" "$local_free" "$local_total" "$local_used_gib" "$local_free_gib" "$local_total_gib" "$nas_used" "$nas_free" "$nas_total" "$nas_used_gib" "$nas_free_gib" "$nas_total_gib" "$work_dir_items" "$work_dir_bytes" "$hot_dir_items" "$hot_dir_bytes" "$extracted_titles" "$nas_dir_bytes")
+state_payload=$(printf '{"health":"%s","enabled":"%s","version":"%s","disk_state":"%s","extraction_status":"%s","extraction_reason":"%s","extraction_progress_percent":%s,"extraction_current_bytes":%s,"extraction_target_bytes":%s,"conveyance_status":"%s","conveyance_progress_percent":%s,"conveyance_current_bytes":%s,"conveyance_target_bytes":%s,"capability_state":"%s","hot_capacity_state":"%s","publish_state":"%s","published_count":%s,"failed_count":%s,"local_dir_used_bytes":%s,"local_dir_free_bytes":%s,"local_dir_total_bytes":%s,"local_dir_used_gib":%s,"local_dir_free_gib":%s,"local_dir_total_gib":%s,"nas_dir_used_bytes":%s,"nas_dir_free_bytes":%s,"nas_dir_total_bytes":%s,"nas_dir_used_gib":%s,"nas_dir_free_gib":%s,"nas_dir_total_gib":%s,"work_dir_items":%s,"work_dir_bytes":%s,"hot_dir_items":%s,"hot_dir_bytes":%s,"extracted_titles":%s,"nas_dir_bytes":%s}' "$(json_string "$health")" "$enabled" "$(json_string "$version")" "$(json_string "$disk_state")" "$(json_string "$rip_state")" "$(json_string "$rip_reason")" "$extraction_progress_percent" "$current_run_bytes" "$current_disc_size" "$(json_string "$conveyance_status")" "$conveyance_progress_percent" "$incoming_bytes" "$hot_source_bytes" "$(json_string "$capability_state")" "$(json_string "$hot_capacity_state")" "$(json_string "$publish_state")" "$published_count" "$failed_count" "$local_used" "$local_free" "$local_total" "$local_used_gib" "$local_free_gib" "$local_total_gib" "$nas_used" "$nas_free" "$nas_total" "$nas_used_gib" "$nas_free_gib" "$nas_total_gib" "$work_dir_items" "$work_dir_bytes" "$hot_dir_items" "$hot_dir_bytes" "$extracted_titles" "$nas_dir_bytes")
 
 if [ "$DISCOVER" = "1" ] || [ "$ONCE" = "1" ]; then
   publish_discovery
