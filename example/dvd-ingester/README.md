@@ -188,14 +188,21 @@ operator decisions for this appliance:
 | Health status | Summarizes doctor, rip, publish, and maintenance state |
 | Rip state | Shows active or latest extraction state |
 | Publish state | Shows conveyor handoff and cold-destination publish state |
-| Hot capacity | Reports local hot-cache capacity pressure |
+| Capability and capacity state | Reports destination mount/write health and local hot-cache capacity pressure |
 | Local storage | Reports local hot-cache used, free, and total capacity in GiB |
 | Destination storage | Reports mounted destination used, free, and total capacity in GiB |
-| Extracted title count | Counts completed title directories in the latest state |
-| Version | Reports the installed `dvd-ingester` version |
-| Update state | Reports update timer/check state when present |
+| Folder indexes | Counts work, hot, and completed title directories; bounded directory names are published as MQTT sensor attributes |
+| Publish counts | Reports the latest publish drain's published and failed counts |
+| Version | Reports the installed `dvd-ingester` version as a diagnostic sensor |
 | Restart button | Restarts owned background services without stopping active rip jobs |
 | Enabled switch | Blocks or restores new ingest while leaving the bridge online |
+
+Folder index entities intentionally keep counts in the sensor state and put
+directory names in `json_attributes_topic` payloads. This keeps Home Assistant
+state history small while still exposing the current work queue, hot handoff
+queue, and completed title folders for dashboards and automations. The default
+attribute list limit is `50` entries and can be changed with
+`HA_FOLDER_INDEX_LIMIT`.
 
 ## Update And Rollback
 

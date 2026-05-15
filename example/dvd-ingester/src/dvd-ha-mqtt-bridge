@@ -39,6 +39,7 @@ if [ "$APPLY" = "1" ]; then
     . "$MQTT_CONFIG_FILE"
   fi
   STATE_DIR="${STATE_DIR:-/run/$PROJECT}"
+  WORK_DIR="${WORK_DIR:-/var/lib/$PROJECT/work}"
   HOT_DIR="${HOT_DIR:-/var/cache/$PROJECT/hot}"
   DEST_DIR="${DEST_DIR:-/mnt/media/$PROJECT}"
   VERSION_FILE="${VERSION_FILE:-/opt/$PROJECT/current/VERSION}"
@@ -53,6 +54,7 @@ else
   fi
   MOCK_ROOT="${MUSTER_MOCK_ROOT:-${TMPDIR:-/tmp}/$PROJECT-mock}"
   STATE_DIR="${STATE_DIR:-$MOCK_ROOT/run/$PROJECT}"
+  WORK_DIR="${WORK_DIR:-$MOCK_ROOT/var/lib/$PROJECT/work}"
   HOT_DIR="${HOT_DIR:-$MOCK_ROOT/var/cache/$PROJECT/hot}"
   DEST_DIR="${DEST_DIR:-$MOCK_ROOT/mnt/$PROJECT}"
   VERSION_FILE="${VERSION_FILE:-VERSION}"
@@ -70,11 +72,12 @@ HA_NODE_ID="${HA_NODE_ID:-dvd_ingester}"
 HA_DEVICE_NAME="${HA_DEVICE_NAME:-dvd-ingester}"
 HA_MQTT_OUTBOX_DIR="${HA_MQTT_OUTBOX_DIR:-$STATE_DIR/ha-mqtt-outbox}"
 HA_MQTT_CONTROL_DIR="${HA_MQTT_CONTROL_DIR:-$STATE_DIR/ha-mqtt-control}"
+HA_FOLDER_INDEX_LIMIT="${HA_FOLDER_INDEX_LIMIT:-50}"
 CONTROL_COMMAND="${CONTROL_COMMAND:-}"
 MOSQUITTO_PUB="${MOSQUITTO_PUB:-mosquitto_pub}"
 PUBLISH_FAILED=0
 
-mkdir -p "$STATE_DIR" "$HA_MQTT_OUTBOX_DIR" "$HA_MQTT_CONTROL_DIR" "$HOT_DIR"
+mkdir -p "$STATE_DIR" "$HA_MQTT_OUTBOX_DIR" "$HA_MQTT_CONTROL_DIR" "$HOT_DIR" "$WORK_DIR"
 if [ "$APPLY" != "1" ]; then
   mkdir -p "$DEST_DIR"
 fi
@@ -197,6 +200,67 @@ count_titles() {
   fi
 }
 
+folder_bytes() {
+  path="$1"
+  if [ -d "$path" ]; then
+    du -sk "$path" 2>/dev/null | awk 'NR == 1 { printf "%.0f\n", $1 * 1024 }'
+  else
+    printf '%s\n' 0
+  fi
+}
+
+folder_item_count() {
+  path="$1"
+  exclude_incoming="$2"
+  if [ ! -d "$path" ]; then
+    printf '%s\n' 0
+    return 0
+  fi
+  if [ "$exclude_incoming" = "1" ]; then
+    find "$path" -mindepth 1 -maxdepth 1 -type d ! -name '.incoming-*' | wc -l | tr -d ' '
+  else
+    find "$path" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' '
+  fi
+}
+
+folder_entries_json() {
+  path="$1"
+  exclude_incoming="$2"
+  limit="$3"
+  if [ ! -d "$path" ]; then
+    printf '%s\n' '[]'
+    return 0
+  fi
+  if [ "$exclude_incoming" = "1" ]; then
+    entries=$(find "$path" -mindepth 1 -maxdepth 1 -type d ! -name '.incoming-*' -print 2>/dev/null | sort | head -n "$limit")
+  else
+    entries=$(find "$path" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort | head -n "$limit")
+  fi
+  printf '['
+  first=1
+  printf '%s\n' "$entries" | while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    name=$(basename "$entry")
+    if [ "$first" = "1" ]; then
+      first=0
+    else
+      printf ','
+    fi
+    printf '"%s"' "$(json_string "$name")"
+  done
+  printf ']'
+}
+
+folder_attributes_payload() {
+  path="$1"
+  exclude_incoming="$2"
+  count="$3"
+  bytes="$4"
+  entries="$5"
+  printf '{"path":"%s","bytes":%s,"count":%s,"limit":%s,"entries":%s}\n' \
+    "$(json_string "$path")" "$bytes" "$count" "$HA_FOLDER_INDEX_LIMIT" "$entries"
+}
+
 state_rank() {
   case "$1" in
     failed) printf '%s\n' 3 ;;
@@ -231,10 +295,16 @@ publish_discovery() {
   discovery_topic="$HA_DISCOVERY_PREFIX/device/$HA_NODE_ID/config"
   availability_topic="$HA_TOPIC_PREFIX/availability"
   state_topic="$HA_TOPIC_PREFIX/state"
+  work_attrs_topic="$HA_TOPIC_PREFIX/folders/work/attributes"
+  hot_attrs_topic="$HA_TOPIC_PREFIX/folders/hot/attributes"
+  nas_attrs_topic="$HA_TOPIC_PREFIX/folders/nas/attributes"
   enabled_state_topic="$HA_TOPIC_PREFIX/enabled/state"
   enabled_command_topic="$HA_TOPIC_PREFIX/control/enabled/set"
   restart_command_topic="$HA_TOPIC_PREFIX/control/restart/set"
-  payload=$(printf '{"device":{"identifiers":["%s"],"name":"%s"},"origin":{"name":"dvd-ingester","sw_version":"%s"},"availability":{"topic":"%s"},"components":{"health":{"platform":"sensor","name":"Health","unique_id":"%s_health","state_topic":"%s","value_template":"{{ value_json.health }}"},"rip_state":{"platform":"sensor","name":"Extraction Status","unique_id":"%s_rip_state","state_topic":"%s","value_template":"{{ value_json.extraction_status }}"},"conveyance_status":{"platform":"sensor","name":"Conveyance Status","unique_id":"%s_conveyance_status","state_topic":"%s","value_template":"{{ value_json.conveyance_status }}"},"local_used":{"platform":"sensor","name":"Local Used","unique_id":"%s_local_used","state_topic":"%s","value_template":"{{ value_json.local_dir_used_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"local_free":{"platform":"sensor","name":"Local Free","unique_id":"%s_local_free","state_topic":"%s","value_template":"{{ value_json.local_dir_free_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"local_total":{"platform":"sensor","name":"Local Total","unique_id":"%s_local_total","state_topic":"%s","value_template":"{{ value_json.local_dir_total_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"nas_used":{"platform":"sensor","name":"NAS Used","unique_id":"%s_nas_used","state_topic":"%s","value_template":"{{ value_json.nas_dir_used_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"nas_free":{"platform":"sensor","name":"NAS Free","unique_id":"%s_nas_free","state_topic":"%s","value_template":"{{ value_json.nas_dir_free_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"nas_total":{"platform":"sensor","name":"NAS Total","unique_id":"%s_nas_total","state_topic":"%s","value_template":"{{ value_json.nas_dir_total_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"extracted_titles":{"platform":"sensor","name":"Extracted Titles","unique_id":"%s_extracted_titles","state_topic":"%s","value_template":"{{ value_json.extracted_titles }}"},"restart_service":{"platform":"button","name":"Restart Service","unique_id":"%s_restart_service","command_topic":"%s","payload_press":"PRESS"},"enabled":{"platform":"switch","name":"Enabled","unique_id":"%s_enabled","state_topic":"%s","command_topic":"%s","payload_on":"ON","payload_off":"OFF"}}}' "$HA_NODE_ID" "$HA_DEVICE_NAME" "$version" "$availability_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$state_topic" "$HA_NODE_ID" "$restart_command_topic" "$HA_NODE_ID" "$enabled_state_topic" "$enabled_command_topic")
+  payload=$(cat <<EOF
+{"device":{"identifiers":["$(json_string "$HA_NODE_ID")"],"name":"$(json_string "$HA_DEVICE_NAME")"},"origin":{"name":"dvd-ingester","sw_version":"$(json_string "$version")"},"availability":{"topic":"$(json_string "$availability_topic")"},"components":{"health":{"platform":"sensor","name":"Health","unique_id":"$(json_string "$HA_NODE_ID")_health","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.health }}"},"rip_state":{"platform":"sensor","name":"Extraction Status","unique_id":"$(json_string "$HA_NODE_ID")_rip_state","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.extraction_status }}"},"conveyance_status":{"platform":"sensor","name":"Conveyance Status","unique_id":"$(json_string "$HA_NODE_ID")_conveyance_status","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.conveyance_status }}"},"capability_state":{"platform":"sensor","name":"Capability State","unique_id":"$(json_string "$HA_NODE_ID")_capability_state","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.capability_state }}","entity_category":"diagnostic"},"hot_capacity_state":{"platform":"sensor","name":"Hot Capacity State","unique_id":"$(json_string "$HA_NODE_ID")_hot_capacity_state","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.hot_capacity_state }}","entity_category":"diagnostic"},"publish_state":{"platform":"sensor","name":"Publish State","unique_id":"$(json_string "$HA_NODE_ID")_publish_state","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.publish_state }}","entity_category":"diagnostic"},"published_count":{"platform":"sensor","name":"Published Count","unique_id":"$(json_string "$HA_NODE_ID")_published_count","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.published_count }}","entity_category":"diagnostic"},"failed_count":{"platform":"sensor","name":"Failed Count","unique_id":"$(json_string "$HA_NODE_ID")_failed_count","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.failed_count }}","entity_category":"diagnostic"},"version":{"platform":"sensor","name":"Version","unique_id":"$(json_string "$HA_NODE_ID")_version","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.version }}","entity_category":"diagnostic"},"local_used":{"platform":"sensor","name":"Local Used","unique_id":"$(json_string "$HA_NODE_ID")_local_used","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.local_dir_used_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"local_free":{"platform":"sensor","name":"Local Free","unique_id":"$(json_string "$HA_NODE_ID")_local_free","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.local_dir_free_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"local_total":{"platform":"sensor","name":"Local Total","unique_id":"$(json_string "$HA_NODE_ID")_local_total","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.local_dir_total_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"nas_used":{"platform":"sensor","name":"NAS Used","unique_id":"$(json_string "$HA_NODE_ID")_nas_used","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.nas_dir_used_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"nas_free":{"platform":"sensor","name":"NAS Free","unique_id":"$(json_string "$HA_NODE_ID")_nas_free","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.nas_dir_free_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"nas_total":{"platform":"sensor","name":"NAS Total","unique_id":"$(json_string "$HA_NODE_ID")_nas_total","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.nas_dir_total_gib }}","device_class":"data_size","unit_of_measurement":"GiB","state_class":"measurement","suggested_display_precision":1},"work_items":{"platform":"sensor","name":"Work Items","unique_id":"$(json_string "$HA_NODE_ID")_work_items","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.work_dir_items }}","json_attributes_topic":"$(json_string "$work_attrs_topic")","icon":"mdi:folder-clock"},"hot_items":{"platform":"sensor","name":"Hot Items","unique_id":"$(json_string "$HA_NODE_ID")_hot_items","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.hot_dir_items }}","json_attributes_topic":"$(json_string "$hot_attrs_topic")","icon":"mdi:folder-move"},"extracted_titles":{"platform":"sensor","name":"Extracted Titles","unique_id":"$(json_string "$HA_NODE_ID")_extracted_titles","state_topic":"$(json_string "$state_topic")","value_template":"{{ value_json.extracted_titles }}","json_attributes_topic":"$(json_string "$nas_attrs_topic")","icon":"mdi:folder-multiple"},"restart_service":{"platform":"button","name":"Restart Service","unique_id":"$(json_string "$HA_NODE_ID")_restart_service","command_topic":"$(json_string "$restart_command_topic")","payload_press":"PRESS"},"enabled":{"platform":"switch","name":"Enabled","unique_id":"$(json_string "$HA_NODE_ID")_enabled","state_topic":"$(json_string "$enabled_state_topic")","command_topic":"$(json_string "$enabled_command_topic")","payload_on":"ON","payload_off":"OFF"}}}
+EOF
+)
   publish "$discovery_topic" "$payload" 1
 }
 
@@ -304,6 +374,18 @@ local_total_gib=$(bytes_to_gib "$local_total")
 nas_used_gib=$(bytes_to_gib "$nas_used")
 nas_free_gib=$(bytes_to_gib "$nas_free")
 nas_total_gib=$(bytes_to_gib "$nas_total")
+extracted_titles=$(count_titles)
+work_dir_items=$(folder_item_count "$WORK_DIR" 0)
+hot_dir_items=$(folder_item_count "$HOT_DIR" 0)
+work_dir_bytes=$(folder_bytes "$WORK_DIR")
+hot_dir_bytes=$(folder_bytes "$HOT_DIR")
+nas_dir_bytes=$(folder_bytes "$DEST_DIR")
+work_entries=$(folder_entries_json "$WORK_DIR" 0 "$HA_FOLDER_INDEX_LIMIT")
+hot_entries=$(folder_entries_json "$HOT_DIR" 0 "$HA_FOLDER_INDEX_LIMIT")
+nas_entries=$(folder_entries_json "$DEST_DIR" 1 "$HA_FOLDER_INDEX_LIMIT")
+work_attrs_payload=$(folder_attributes_payload "$WORK_DIR" 0 "$work_dir_items" "$work_dir_bytes" "$work_entries")
+hot_attrs_payload=$(folder_attributes_payload "$HOT_DIR" 0 "$hot_dir_items" "$hot_dir_bytes" "$hot_entries")
+nas_attrs_payload=$(folder_attributes_payload "$DEST_DIR" 1 "$extracted_titles" "$nas_dir_bytes" "$nas_entries")
 
 if [ ! -f "$STATE_DIR/capability.json" ]; then
   if [ -d "$DEST_DIR" ]; then
@@ -330,10 +412,9 @@ if [ ! -f "$STATE_DIR/handoff.json" ]; then
   conveyance_status="$publish_state"
 fi
 
-extracted_titles=$(count_titles)
 health=$(compute_health)
 
-state_payload=$(printf '{"health":"%s","enabled":"%s","version":"%s","extraction_status":"%s","extraction_reason":"%s","conveyance_status":"%s","capability_state":"%s","hot_capacity_state":"%s","publish_state":"%s","published_count":%s,"failed_count":%s,"local_dir_used_bytes":%s,"local_dir_free_bytes":%s,"local_dir_total_bytes":%s,"local_dir_used_gib":%s,"local_dir_free_gib":%s,"local_dir_total_gib":%s,"nas_dir_used_bytes":%s,"nas_dir_free_bytes":%s,"nas_dir_total_bytes":%s,"nas_dir_used_gib":%s,"nas_dir_free_gib":%s,"nas_dir_total_gib":%s,"extracted_titles":%s}' "$(json_string "$health")" "$enabled" "$(json_string "$version")" "$(json_string "$rip_state")" "$(json_string "$rip_reason")" "$(json_string "$conveyance_status")" "$(json_string "$capability_state")" "$(json_string "$hot_capacity_state")" "$(json_string "$publish_state")" "$published_count" "$failed_count" "$local_used" "$local_free" "$local_total" "$local_used_gib" "$local_free_gib" "$local_total_gib" "$nas_used" "$nas_free" "$nas_total" "$nas_used_gib" "$nas_free_gib" "$nas_total_gib" "$extracted_titles")
+state_payload=$(printf '{"health":"%s","enabled":"%s","version":"%s","extraction_status":"%s","extraction_reason":"%s","conveyance_status":"%s","capability_state":"%s","hot_capacity_state":"%s","publish_state":"%s","published_count":%s,"failed_count":%s,"local_dir_used_bytes":%s,"local_dir_free_bytes":%s,"local_dir_total_bytes":%s,"local_dir_used_gib":%s,"local_dir_free_gib":%s,"local_dir_total_gib":%s,"nas_dir_used_bytes":%s,"nas_dir_free_bytes":%s,"nas_dir_total_bytes":%s,"nas_dir_used_gib":%s,"nas_dir_free_gib":%s,"nas_dir_total_gib":%s,"work_dir_items":%s,"work_dir_bytes":%s,"hot_dir_items":%s,"hot_dir_bytes":%s,"extracted_titles":%s,"nas_dir_bytes":%s}' "$(json_string "$health")" "$enabled" "$(json_string "$version")" "$(json_string "$rip_state")" "$(json_string "$rip_reason")" "$(json_string "$conveyance_status")" "$(json_string "$capability_state")" "$(json_string "$hot_capacity_state")" "$(json_string "$publish_state")" "$published_count" "$failed_count" "$local_used" "$local_free" "$local_total" "$local_used_gib" "$local_free_gib" "$local_total_gib" "$nas_used" "$nas_free" "$nas_total" "$nas_used_gib" "$nas_free_gib" "$nas_total_gib" "$work_dir_items" "$work_dir_bytes" "$hot_dir_items" "$hot_dir_bytes" "$extracted_titles" "$nas_dir_bytes")
 
 if [ "$DISCOVER" = "1" ] || [ "$ONCE" = "1" ]; then
   publish_discovery
@@ -341,8 +422,14 @@ fi
 
 publish "$HA_TOPIC_PREFIX/availability" online 1
 publish "$HA_TOPIC_PREFIX/state" "$state_payload" 1
+publish "$HA_TOPIC_PREFIX/folders/work/attributes" "$work_attrs_payload" 1
+publish "$HA_TOPIC_PREFIX/folders/hot/attributes" "$hot_attrs_payload" 1
+publish "$HA_TOPIC_PREFIX/folders/nas/attributes" "$nas_attrs_payload" 1
 publish "$HA_TOPIC_PREFIX/enabled/state" "$enabled" 1
 printf '%s\n' "$state_payload" > "$STATE_DIR/ha-mqtt-state.json"
+printf '%s\n' "$work_attrs_payload" > "$STATE_DIR/ha-mqtt-work-folder.json"
+printf '%s\n' "$hot_attrs_payload" > "$STATE_DIR/ha-mqtt-hot-folder.json"
+printf '%s\n' "$nas_attrs_payload" > "$STATE_DIR/ha-mqtt-nas-folder.json"
 
 if [ "$CONTROL" = "1" ] || [ "$ONCE" = "1" ]; then
   process_controls

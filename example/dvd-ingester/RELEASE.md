@@ -17,6 +17,11 @@
 - Updated rip and handoff state files at the start of extraction so Home
   Assistant does not show stale `ready_for_cold_publish` while a new disc is
   actively ripping.
+- Added Home Assistant MQTT folder index sensors for work, hot, and completed
+  title directories, with counts in sensor state and bounded directory lists in
+  attributes.
+- Added diagnostic Home Assistant entities for capability state, hot-capacity
+  state, publish state, publish counts, and installed version.
 
 ## 0.4.0
 
