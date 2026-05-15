@@ -1,5 +1,13 @@
 # dvd-ingester Release Notes
 
+## 1.0.3
+
+- Log captured `doctor.sh` stdout and stderr before rolling back a failed
+  release update, so `journalctl -t dvd-ingester-update` shows the actual
+  health-check failure instead of only the generic rollback message.
+- Added a regression test that exercises failed update rollback and verifies
+  the doctor output is preserved in updater logs.
+
 ## 1.0.2
 
 - Avoid recursive NAS size scans in the Home Assistant MQTT bridge so slow NAS

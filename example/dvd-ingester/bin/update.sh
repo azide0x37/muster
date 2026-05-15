@@ -22,6 +22,19 @@ log() {
   fi
 }
 
+log_prefixed_file() {
+  prefix="$1"
+  file="$2"
+  if [ ! -s "$file" ]; then
+    log "$prefix(no output captured)"
+    return
+  fi
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    log "$prefix$line"
+  done < "$file"
+}
+
 json_value() {
   key="$1"
   sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$2" | head -n 1
@@ -40,6 +53,19 @@ restart_timers() {
     systemctl daemon-reload
     systemctl restart dvd-publish-one.timer dvd-ingester-doctor.timer dvd-ingester-update.timer dvd-ingester-ha-mqtt.timer || true
   fi
+}
+
+run_doctor() {
+  doctor_log="$TMP_DIR/doctor.log"
+  if "$CURRENT_LINK/bin/doctor.sh" > "$doctor_log" 2>&1; then
+    return 0
+  else
+    doctor_status=$?
+  fi
+
+  log "Doctor failed with exit status $doctor_status"
+  log_prefixed_file "doctor: " "$doctor_log"
+  return "$doctor_status"
 }
 
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -97,16 +123,17 @@ mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
 
 restart_timers
 
-if ! "$CURRENT_LINK/bin/doctor.sh"; then
-  log "Health check failed after update; rolling back"
-  if [ -n "$PREVIOUS_TARGET" ]; then
-    rm -f "$CURRENT_LINK.next"
-    ln -s "$PREVIOUS_TARGET" "$CURRENT_LINK.next"
-    rm -f "$CURRENT_LINK"
-    mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
-    restart_timers
-  fi
-  exit 1
+if run_doctor; then
+  log "Updated $PROJECT to $NEW_VERSION"
+  exit 0
 fi
 
-log "Updated $PROJECT to $NEW_VERSION"
+log "Health check failed after update; rolling back"
+if [ -n "$PREVIOUS_TARGET" ]; then
+  rm -f "$CURRENT_LINK.next"
+  ln -s "$PREVIOUS_TARGET" "$CURRENT_LINK.next"
+  rm -f "$CURRENT_LINK"
+  mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
+  restart_timers
+fi
+exit 1
