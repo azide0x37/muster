@@ -8,6 +8,7 @@ MOCK_ROOT="${MUSTER_MOCK_ROOT:-${TMPDIR:-/tmp}/$PROJECT-doctor.$$}"
 REMOVE_MOCK=0
 RIP_SCRIPT="$SRC_ROOT/src/dvd-rip-one"
 PUBLISH_SCRIPT="$SRC_ROOT/src/dvd-publish-one"
+CONFIG_FILE="${CONFIG_FILE:-/etc/$PROJECT/$PROJECT.env}"
 
 if [ ! -x "$RIP_SCRIPT" ]; then
   RIP_SCRIPT="$SCRIPT_DIR/dvd-rip-one"
@@ -51,6 +52,22 @@ check_units() {
   fi
 }
 
+check_sidecar_tools() {
+  if [ ! -f "$CONFIG_FILE" ]; then
+    return 0
+  fi
+
+  # shellcheck disable=SC1090
+  . "$CONFIG_FILE"
+
+  if [ "${ARCHIVE_SIDECAR:-1}" = "1" ]; then
+    if ! command -v "${HANDBRAKE_CLI:-HandBrakeCLI}" >/dev/null 2>&1; then
+      printf '%s\n' "HandBrakeCLI is required when ARCHIVE_SIDECAR=1" >&2
+      return 1
+    fi
+  fi
+}
+
 check_mock_flow() {
   mkdir -p "$MOCK_ROOT/run/dvd-ingester"
   MUSTER_MOCK_ROOT="$MOCK_ROOT" \
@@ -85,6 +102,7 @@ check_mock_flow() {
 
 check_files
 check_units
+check_sidecar_tools
 check_mock_flow
 
 printf '%s\n' "ok: $PROJECT"

@@ -16,6 +16,7 @@ test:
 	./tests/test_installer_idempotent.sh
 	./tests/test_update_doctor_logging.sh
 	./tests/test_conveyor_flow.sh
+	./tests/test_backfill_archive_sidecars.sh
 	./tests/test_ha_mqtt_bridge.sh
 	./tests/test_readme_compliance.sh
 	./tests/test_release_docs.sh
@@ -32,7 +33,7 @@ changelog:
 
 package: changelog clean
 	mkdir -p "$(PACKAGE_ROOT)"
-	cp -R AGENTS.md CHANGELOG.md CODEX_TASK.md MUSTER.md README.md RELEASE.md SECURITY.md VERSION muster.yaml bin etc src systemd udev tests "$(PACKAGE_ROOT)/"
+	cp -R AGENTS.md CHANGELOG.md CODEX_TASK.md MUSTER.md README.md RELEASE.md SECURITY.md VERSION muster.yaml bin docs etc src systemd udev tests "$(PACKAGE_ROOT)/"
 	cp src/dvd-rip-one src/dvd-publish-one src/dvd-control src/dvd-ha-mqtt-bridge "$(PACKAGE_ROOT)/bin/"
 	find "$(PACKAGE_ROOT)" -type f -name '*.sh' -exec chmod 0755 {} \;
 	chmod 0755 "$(PACKAGE_ROOT)/src/dvd-rip-one" "$(PACKAGE_ROOT)/src/dvd-publish-one" "$(PACKAGE_ROOT)/src/dvd-control" "$(PACKAGE_ROOT)/src/dvd-ha-mqtt-bridge" "$(PACKAGE_ROOT)/bin/dvd-rip-one" "$(PACKAGE_ROOT)/bin/dvd-publish-one" "$(PACKAGE_ROOT)/bin/dvd-control" "$(PACKAGE_ROOT)/bin/dvd-ha-mqtt-bridge"

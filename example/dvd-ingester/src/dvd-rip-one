@@ -49,6 +49,12 @@ MIN_HOT_FREE_BYTES="${MIN_HOT_FREE_BYTES:-10737418240}"
 CAPACITY_TIMEOUT_SECONDS="${CAPACITY_TIMEOUT_SECONDS:-900}"
 CAPACITY_INTERVAL_SECONDS="${CAPACITY_INTERVAL_SECONDS:-5}"
 RIP_COMMAND="${RIP_COMMAND:-}"
+ARCHIVE_SIDECAR="${ARCHIVE_SIDECAR:-1}"
+ARCHIVE_SIDECAR_FILE="${ARCHIVE_SIDECAR_FILE:-main-feature.mkv}"
+ARCHIVE_SIDECAR_TITLE="${ARCHIVE_SIDECAR_TITLE:-longest}"
+ARCHIVE_SIDECAR_METADATA_FILE="${ARCHIVE_SIDECAR_METADATA_FILE:-main-feature.json}"
+HANDBRAKE_CLI="${HANDBRAKE_CLI:-HandBrakeCLI}"
+HANDBRAKE_PRESET="${HANDBRAKE_PRESET:-Fast 480p30}"
 EJECT_AFTER_RIP="${EJECT_AFTER_RIP:-1}"
 ALLOW_UNMOUNTED_DEST="${ALLOW_UNMOUNTED_DEST:-0}"
 EJECT_ATTEMPTED=0
@@ -220,6 +226,89 @@ wait_for_hot_capacity() {
   done
 }
 
+normalize_title_number() {
+  title=$(printf '%s' "$1" | tr -cd '0-9' | sed 's/^0*//')
+  if [ -z "$title" ]; then
+    title=1
+  fi
+  printf '%s\n' "$title"
+}
+
+archive_root() {
+  find "$RUN_DIR" -mindepth 1 -maxdepth 3 -type f -path '*/VIDEO_TS/VIDEO_TS.IFO' 2>/dev/null \
+    | sort \
+    | sed -n '1{s#/VIDEO_TS/VIDEO_TS.IFO$##;p;}'
+}
+
+archive_sidecar_title() {
+  root="$1"
+  case "$ARCHIVE_SIDECAR_TITLE" in
+    longest|main|main-feature)
+      if command -v lsdvd >/dev/null 2>&1; then
+        longest=$(lsdvd "$root" 2>/dev/null | awk -F': ' '/^Longest track:/ {print $2; exit}' | tr -cd '0-9')
+        normalize_title_number "$longest"
+      else
+        normalize_title_number 1
+      fi
+      ;;
+    title1|title-1)
+      normalize_title_number 1
+      ;;
+    [0-9]*)
+      normalize_title_number "$ARCHIVE_SIDECAR_TITLE"
+      ;;
+    *)
+      printf '%s\n' "failed: invalid ARCHIVE_SIDECAR_TITLE: $ARCHIVE_SIDECAR_TITLE" >&2
+      return 1
+      ;;
+  esac
+}
+
+write_archive_sidecar() {
+  if [ "$ARCHIVE_SIDECAR" != "1" ]; then
+    return 0
+  fi
+
+  case "$ARCHIVE_SIDECAR_FILE" in
+    ""|*/*)
+      printf '%s\n' "failed: ARCHIVE_SIDECAR_FILE must be a plain filename" >&2
+      return 1
+      ;;
+  esac
+  case "$ARCHIVE_SIDECAR_METADATA_FILE" in
+    ""|*/*)
+      printf '%s\n' "failed: ARCHIVE_SIDECAR_METADATA_FILE must be a plain filename" >&2
+      return 1
+      ;;
+  esac
+
+  root="$(archive_root)"
+  if [ -z "$root" ]; then
+    printf '%s\n' "failed: dvdbackup output did not include VIDEO_TS/VIDEO_TS.IFO" >&2
+    return 1
+  fi
+
+  if ! command -v "$HANDBRAKE_CLI" >/dev/null 2>&1; then
+    printf '%s\n' "failed: $HANDBRAKE_CLI is required for archive sidecar generation; set ARCHIVE_SIDECAR=0 to disable" >&2
+    return 1
+  fi
+
+  title="$(archive_sidecar_title "$root")" || return 1
+  output="$root/$ARCHIVE_SIDECAR_FILE"
+  tmp="$root/.incoming-$ARCHIVE_SIDECAR_FILE.$$"
+  rm -f "$tmp"
+
+  if ! "$HANDBRAKE_CLI" -i "$root" -t "$title" -o "$tmp" --preset "$HANDBRAKE_PRESET"; then
+    rm -f "$tmp"
+    printf '%s\n' "failed: archive sidecar generation failed for title $title" >&2
+    return 1
+  fi
+
+  mv "$tmp" "$output"
+  printf '{"file":"%s","source":"%s","title":%s,"preset":"%s"}\n' \
+    "$ARCHIVE_SIDECAR_FILE" "$root" "$title" "$HANDBRAKE_PRESET" > "$root/$ARCHIVE_SIDECAR_METADATA_FILE"
+}
+
 run_ingest() {
   export DEVICE RUN_DIR RUN_ID DEVICE_FINGERPRINT DISC_LABEL DISC_UUID DISC_TYPE DISC_SIZE STATE_DIR WORK_DIR HOT_DIR DEST_DIR
   mkdir -p "$RUN_DIR"
@@ -233,6 +322,7 @@ run_ingest() {
   elif [ "$APPLY" = "1" ]; then
     if command -v dvdbackup >/dev/null 2>&1; then
       dvdbackup -M -i "$DEVICE" -o "$RUN_DIR" || return 1
+      write_archive_sidecar || return 1
     elif command -v makemkvcon >/dev/null 2>&1; then
       makemkvcon mkv disc:0 all "$RUN_DIR" || return 1
     else
