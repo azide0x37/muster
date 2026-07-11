@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -117,6 +118,23 @@ func TestNarrowLayoutUsesOnePaneAndNeverOverflows(t *testing.T) {
 	}
 }
 
+func TestConfirmationDialogFitsMinimumTerminal(t *testing.T) {
+	graph := fixtureGraph(t)
+	a := newApp(graph, Options{Hostname: "edge-box"})
+	a.width = minimumWidth
+	a.height = minimumHeight
+	a.confirmAction = "action:media-gateway.doctor"
+	a.confirmTarget = "implementation:media-gateway"
+
+	output := a.render()
+	assertContains(t, output, "CONFIRM DOCTOR", "y/enter", "n/esc")
+	for lineNumber, line := range strings.Split(output, "\n") {
+		if width := lipgloss.Width(line); width > minimumWidth {
+			t.Fatalf("line %d has width %d, want <= %d: %q", lineNumber+1, width, minimumWidth, line)
+		}
+	}
+}
+
 func TestKeyboardNavigationDrillBackAndDoctor(t *testing.T) {
 	graph := fixtureGraph(t)
 	var doctorID model.ID
@@ -153,12 +171,14 @@ func TestKeyboardNavigationDrillBackAndDoctor(t *testing.T) {
 	if command == nil {
 		t.Fatal("confirmed doctor returned no command")
 	}
-	message := command()
+	messages := drainCommand(command)
 	if doctorID != "action:media-gateway.doctor" {
 		t.Fatalf("doctor target = %q, want doctor action", doctorID)
 	}
-	updatedModel, _ = updated.Update(message)
-	updated = updatedModel.(app)
+	for _, message := range messages {
+		updatedModel, _ = updated.Update(message)
+		updated = updatedModel.(app)
+	}
 	if !strings.Contains(updated.status, "Doctor completed") {
 		t.Fatalf("doctor completion status = %q", updated.status)
 	}
@@ -227,7 +247,14 @@ func TestFailedDoctorStillRefreshesWrittenEvidence(t *testing.T) {
 	if doctorCommand == nil {
 		t.Fatal("confirmed doctor returned no command")
 	}
-	updatedModel, refreshCommand := updatedModel.(app).Update(doctorCommand())
+	var refreshCommand tea.Cmd
+	for _, message := range drainCommand(doctorCommand) {
+		var followUp tea.Cmd
+		updatedModel, followUp = updatedModel.(app).Update(message)
+		if _, isDone := message.(doctorDoneMsg); isDone {
+			refreshCommand = followUp
+		}
+	}
 	updated := updatedModel.(app)
 	if refreshCommand != nil || !strings.Contains(updated.status, "Doctor for") || !strings.Contains(updated.status, "runtime graph refreshed") {
 		t.Fatalf("failed doctor status = %q, unexpected follow-up refresh = %v", updated.status, refreshCommand != nil)
@@ -451,6 +478,70 @@ func fixtureGraph(t *testing.T) *model.Graph {
 		t.Fatalf("NewGraph: %v", err)
 	}
 	return graph
+}
+
+func TestMotionSpringSettlesAndHonorsReducedMotion(t *testing.T) {
+	a := newApp(fixtureGraph(t), Options{Hostname: "shed-pi-01"})
+	a.width, a.height = 118, 34
+	a.selected = "component:pattern.conveyor"
+
+	updatedModel, command := a.handleKey("enter")
+	a = updatedModel.(app)
+	if a.inspect == "" || command == nil {
+		t.Fatal("opening the inspector did not start the entrance glide")
+	}
+	if a.displayScroll() >= 0 {
+		t.Fatalf("entrance display offset = %d, want negative", a.displayScroll())
+	}
+	for frame := 0; frame < 600 && a.animating; frame++ {
+		updatedModel, _ = a.Update(frameMsg(time.Now()))
+		a = updatedModel.(app)
+	}
+	if a.animating || a.displayScroll() != 0 {
+		t.Fatalf("entrance did not settle: animating = %v, offset = %d", a.animating, a.displayScroll())
+	}
+
+	updatedModel, command = a.handleKey("j")
+	a = updatedModel.(app)
+	if a.scroll != 1 || command == nil || !a.animating {
+		t.Fatalf("scroll glide did not start: target = %d, animating = %v", a.scroll, a.animating)
+	}
+
+	updatedModel, command = a.Update(ledTickMsg(time.Now()))
+	a = updatedModel.(app)
+	if !a.ledDim || command == nil {
+		t.Fatal("LED tick did not toggle and reschedule")
+	}
+
+	if _, command = a.Update(spinner.TickMsg{}); command != nil {
+		t.Fatal("idle spinner tick was rescheduled")
+	}
+
+	t.Setenv(reduceMotionEnv, "1")
+	calm := newApp(fixtureGraph(t), Options{Hostname: "shed-pi-01"})
+	calm.selected = "component:pattern.conveyor"
+	updatedModel, command = calm.handleKey("enter")
+	calm = updatedModel.(app)
+	if command != nil || calm.animating || calm.displayScroll() != 0 {
+		t.Fatal("reduced motion still animated the inspector entrance")
+	}
+}
+
+// drainCommand executes a command, flattening tea.Batch trees into the
+// messages they produce, so tests can dispatch them the way a program would.
+func drainCommand(command tea.Cmd) []tea.Msg {
+	if command == nil {
+		return nil
+	}
+	message := command()
+	if batch, ok := message.(tea.BatchMsg); ok {
+		var messages []tea.Msg
+		for _, sub := range batch {
+			messages = append(messages, drainCommand(sub)...)
+		}
+		return messages
+	}
+	return []tea.Msg{message}
 }
 
 func assertContains(t *testing.T, haystack string, needles ...string) {

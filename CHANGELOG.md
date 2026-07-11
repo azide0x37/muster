@@ -2,6 +2,19 @@
 
 All notable changes to the shared Muster core are documented here.
 
+## 0.1.1 - 2026-07-11
+
+### Changed
+
+- Polished the full-screen inspector with clearer visual hierarchy, live status
+  chrome, contextual key hints, and health-aware color.
+- Added Bubbles-powered keys and activity indication plus Harmonica-smoothed
+  navigation and inspector transitions.
+- Added the `MUSTER_REDUCE_MOTION=1` accessibility control.
+- Presented doctor confirmation as a centered modal, including safe rendering
+  at the minimum supported terminal size.
+- Updated the Charm TUI dependency set and the minimum Go version to 1.25.
+
 ## 0.1.0 - 2026-07-10
 
 ### Added

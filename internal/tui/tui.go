@@ -6,15 +6,31 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/harmonica"
 
 	"github.com/azide0x37/muster/internal/model"
 )
+
+// Motion tuning. One spring serves every scroll glide; a critically damped
+// ratio means content settles without overshooting past a line of text.
+const (
+	animationFPS     = 30
+	entranceOffset   = 3.0
+	ledPulseInterval = 900 * time.Millisecond
+	reduceMotionEnv  = "MUSTER_REDUCE_MOTION"
+)
+
+var scrollSpring = harmonica.NewSpring(harmonica.FPS(animationFPS), 8.0, 1.0)
 
 // Options supplies host-specific behavior without coupling the TUI to an
 // inspector, registry, privilege boundary, or process runner.
@@ -92,6 +108,17 @@ type app struct {
 	status        string
 	confirmAction model.ID
 	confirmTarget model.ID
+
+	// Motion state. scroll is always the destination; scrollPos is where the
+	// eye currently is. The deterministic Render path never animates, so the
+	// two only diverge inside a live program.
+	keys         keymap
+	spin         spinner.Model
+	ledDim       bool
+	scrollPos    float64
+	scrollVel    float64
+	animating    bool
+	reduceMotion bool
 }
 
 func newApp(graph *model.Graph, opts Options) app {
@@ -111,13 +138,135 @@ func newApp(graph *model.Graph, opts Options) app {
 		dark:         true,
 		noColor:      opts.NoColor,
 		forceNoColor: opts.NoColor,
+		keys:         newKeymap(),
+		spin:         spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(spinnerStyle(true, opts.NoColor))),
+		reduceMotion: os.Getenv(reduceMotionEnv) != "",
 	}
 	result.ensureSelection()
 	return result
 }
 
+// keymap names every key the console understands; the ribbon renders the
+// subset that applies to the moment.
+type keymap struct {
+	move      key.Binding
+	scroll    key.Binding
+	inspect   key.Binding
+	back      key.Binding
+	pane      key.Binding
+	doctor    key.Binding
+	refresh   key.Binding
+	help      key.Binding
+	closeHelp key.Binding
+	quit      key.Binding
+	yes       key.Binding
+	no        key.Binding
+}
+
+func newKeymap() keymap {
+	return keymap{
+		move:      key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "move")),
+		scroll:    key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "scroll")),
+		inspect:   key.NewBinding(key.WithKeys("enter", "right", "l"), key.WithHelp("enter", "inspect")),
+		back:      key.NewBinding(key.WithKeys("esc", "backspace", "left", "h"), key.WithHelp("esc", "back")),
+		pane:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "pane")),
+		doctor:    key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
+		refresh:   key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
+		help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		closeHelp: key.NewBinding(key.WithKeys("?", "esc"), key.WithHelp("?/esc", "close help")),
+		quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		yes:       key.NewBinding(key.WithKeys("y", "enter"), key.WithHelp("y/enter", "confirm doctor")),
+		no:        key.NewBinding(key.WithKeys("n", "esc"), key.WithHelp("n/esc", "cancel")),
+	}
+}
+
+func (a app) ribbonBindings() []key.Binding {
+	k := a.keys
+	if a.confirmAction != "" {
+		return []key.Binding{k.yes, k.no, k.quit}
+	}
+	if a.help {
+		return []key.Binding{k.closeHelp, k.quit}
+	}
+	var bindings []key.Binding
+	if a.inspect != "" {
+		bindings = []key.Binding{k.scroll, k.back}
+	} else {
+		bindings = []key.Binding{k.move, k.inspect, k.pane}
+	}
+	if _, ok := a.doctorAction(a.activeID()); ok && a.opts.RunDoctor != nil {
+		bindings = append(bindings, k.doctor)
+	}
+	return append(bindings, k.refresh, k.help, k.quit)
+}
+
 func (a app) Init() tea.Cmd {
-	return tea.RequestBackgroundColor
+	if a.reduceMotion {
+		return tea.RequestBackgroundColor
+	}
+	return tea.Batch(tea.RequestBackgroundColor, ledTick())
+}
+
+type ledTickMsg time.Time
+
+func ledTick() tea.Cmd {
+	return tea.Tick(ledPulseInterval, func(t time.Time) tea.Msg { return ledTickMsg(t) })
+}
+
+type frameMsg time.Time
+
+func frameTick() tea.Cmd {
+	return tea.Tick(time.Second/animationFPS, func(t time.Time) tea.Msg { return frameMsg(t) })
+}
+
+// displayScroll is the offset the viewer actually sees: the spring position
+// mid-glide, the true offset at rest.
+func (a app) displayScroll() int {
+	if a.animating {
+		return int(math.Round(a.scrollPos))
+	}
+	return a.scroll
+}
+
+func (a *app) snapScroll() {
+	a.scrollPos = float64(a.scroll)
+	a.scrollVel = 0
+	a.animating = false
+}
+
+// animateScrollTo retargets the scroll spring and starts the frame loop if
+// it is not already running.
+func (a *app) animateScrollTo(target int) tea.Cmd {
+	target = a.clampScroll(target)
+	if target == a.scroll && !a.animating {
+		return nil
+	}
+	a.scroll = target
+	if a.reduceMotion {
+		a.snapScroll()
+		return nil
+	}
+	if a.animating {
+		return nil
+	}
+	a.animating = true
+	return frameTick()
+}
+
+// beginEntrance glides freshly opened content up into place.
+func (a *app) beginEntrance() tea.Cmd {
+	a.scroll = 0
+	if a.reduceMotion {
+		a.snapScroll()
+		return nil
+	}
+	a.scrollPos = -entranceOffset
+	a.scrollVel = 0
+	if a.animating {
+		return nil
+	}
+	a.animating = true
+	return frameTick()
 }
 
 type refreshDoneMsg struct {
@@ -137,13 +286,36 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		a.width = message.Width
 		a.height = message.Height
 		a.scroll = a.clampScroll(a.scroll)
+		a.snapScroll()
 		return a, nil
 	case tea.BackgroundColorMsg:
 		a.dark = message.IsDark()
+		a.spin.Style = spinnerStyle(a.dark, a.noColor)
 		return a, nil
 	case tea.ColorProfileMsg:
 		a.noColor = a.forceNoColor || message.Profile <= colorprofile.ASCII
+		a.spin.Style = spinnerStyle(a.dark, a.noColor)
 		return a, nil
+	case ledTickMsg:
+		a.ledDim = !a.ledDim
+		return a, ledTick()
+	case frameMsg:
+		if !a.animating {
+			return a, nil
+		}
+		a.scrollPos, a.scrollVel = scrollSpring.Update(a.scrollPos, a.scrollVel, float64(a.scroll))
+		if math.Abs(a.scrollPos-float64(a.scroll)) < 0.05 && math.Abs(a.scrollVel) < 0.05 {
+			a.snapScroll()
+			return a, nil
+		}
+		return a, frameTick()
+	case spinner.TickMsg:
+		if !a.busy {
+			return a, nil
+		}
+		var command tea.Cmd
+		a.spin, command = a.spin.Update(message)
+		return a, command
 	case refreshDoneMsg:
 		afterDoctor := a.operation == "refreshing after doctor"
 		previousStatus := a.status
@@ -220,7 +392,7 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 			a.busy = true
 			a.operation = "running doctor"
 			a.status = "Running doctor for " + a.nameFor(targetID) + "…"
-			return a, doctorCommand(a.opts.RunDoctor, actionID, targetID)
+			return a, tea.Batch(doctorCommand(a.opts.RunDoctor, actionID, targetID), a.spin.Tick)
 		case "n", "N", "esc", "escape", "backspace", "left", "h":
 			targetID := a.confirmTarget
 			a.confirmAction = ""
@@ -237,6 +409,7 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 		case "?", "esc", "escape", "backspace", "left", "h":
 			a.help = false
 			a.scroll = 0
+			a.snapScroll()
 		}
 		return a, nil
 	}
@@ -245,15 +418,18 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 	case "?":
 		a.help = true
 		a.scroll = 0
+		a.snapScroll()
 		return a, nil
 	case "esc", "escape", "backspace", "left", "h":
 		if a.inspect != "" {
 			a.inspect = ""
 			a.scroll = 0
+			a.snapScroll()
 			a.focus = focusTree
 		} else if a.focus == focusDetail {
 			a.focus = focusTree
 			a.scroll = 0
+			a.snapScroll()
 		}
 		return a, nil
 	case "tab":
@@ -264,26 +440,25 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 				a.focus = focusTree
 			}
 			a.scroll = 0
+			a.snapScroll()
 		}
 		return a, nil
 	case "up", "k":
 		if a.inspect != "" || a.focus == focusDetail {
-			a.scroll = a.clampScroll(a.scroll - 1)
-		} else {
-			a.moveSelection(-1)
+			return a, a.animateScrollTo(a.scroll - 1)
 		}
+		a.moveSelection(-1)
 		return a, nil
 	case "down", "j":
 		if a.inspect != "" || a.focus == focusDetail {
-			a.scroll = a.clampScroll(a.scroll + 1)
-		} else {
-			a.moveSelection(1)
+			return a, a.animateScrollTo(a.scroll + 1)
 		}
+		a.moveSelection(1)
 		return a, nil
 	case "enter", "right", "l":
 		if a.selected != "" {
 			a.inspect = a.selected
-			a.scroll = 0
+			return a, a.beginEntrance()
 		}
 		return a, nil
 	case "r":
@@ -298,7 +473,7 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 		a.busy = true
 		a.operation = "refreshing runtime graph"
 		a.status = "Refreshing runtime graph…"
-		return a, refreshCommand(a.opts.Refresh)
+		return a, tea.Batch(refreshCommand(a.opts.Refresh), a.spin.Tick)
 	case "d":
 		if a.busy {
 			a.status = "Already " + a.operation
@@ -331,7 +506,7 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 		a.busy = true
 		a.operation = "running doctor"
 		a.status = "Running doctor for " + a.nameFor(id) + "…"
-		return a, doctorCommand(a.opts.RunDoctor, action.ID, id)
+		return a, tea.Batch(doctorCommand(a.opts.RunDoctor, action.ID, id), a.spin.Tick)
 	}
 	return a, nil
 }
@@ -407,6 +582,7 @@ func (a *app) moveSelection(delta int) {
 	}
 	a.selected = rows[index].id
 	a.scroll = 0
+	a.snapScroll()
 }
 
 func (a app) activeID() model.ID {
