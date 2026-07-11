@@ -13,6 +13,7 @@ test:
 	./tests/test_shellcheck.sh
 	./tests/test_units.sh
 	./tests/test_installer_idempotent.sh
+	./tests/test_legacy_upgrade.sh
 	./tests/test_release_security.sh
 	./tests/test_update_registration_rollback.sh
 	./tests/test_readme_compliance.sh

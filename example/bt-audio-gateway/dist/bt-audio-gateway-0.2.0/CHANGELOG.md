@@ -16,4 +16,7 @@ This file is generated from `RELEASE.md`. Update release notes first, then run `
 - Harden install and update as one serialized release transaction with private
   staging, strict project/version/SHA and archive validation, immutable version
   reuse, and atomic rollback of current, registration, and managed units.
+- Resolve the fresh-install audio user from the invoking sudo account when the
+  legacy `pi` default is unavailable, migrate that legacy default during a
+  `0.1.4` upgrade, and fail truthfully when audio services cannot start.
 
