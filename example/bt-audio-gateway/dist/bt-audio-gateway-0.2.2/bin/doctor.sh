@@ -99,13 +99,21 @@ check_runtime() {
     muster_check unhealthy snapclient-active "snapclient instance is not active for $AUDIO_USER"
   fi
 
-  if bluetoothctl info "$BT_MAC" 2>/dev/null | grep -q "Trusted: yes"; then
+  if systemctl is-active --quiet bluetooth.service; then
+    muster_check healthy bluetooth-service "bluetooth.service is active"
+    BT_INFO=$(timeout --signal=TERM 5 bluetoothctl info "$BT_MAC" 2>/dev/null || true)
+  else
+    muster_check unhealthy bluetooth-service "bluetooth.service is not active"
+    BT_INFO=""
+  fi
+
+  if printf '%s\n' "$BT_INFO" | grep -q "Trusted: yes"; then
     muster_check healthy bluetooth-trusted "Bluetooth device is trusted"
   else
     muster_check unhealthy bluetooth-trusted "Bluetooth device is not trusted or known"
   fi
 
-  if bluetoothctl info "$BT_MAC" 2>/dev/null | grep -q "Connected: yes"; then
+  if printf '%s\n' "$BT_INFO" | grep -q "Connected: yes"; then
     muster_check healthy bluetooth-connected "Bluetooth device is connected"
   else
     muster_check degraded bluetooth-connected "Bluetooth device is currently disconnected"
@@ -118,7 +126,7 @@ check_runtime() {
   fi
 
   if command -v nc >/dev/null 2>&1; then
-    if nc -z "$SNAPSERVER_HOST" "$SNAPSERVER_PORT" >/dev/null 2>&1; then
+    if nc -w 3 -z "$SNAPSERVER_HOST" "$SNAPSERVER_PORT" >/dev/null 2>&1; then
       muster_check healthy snapserver "Snapserver is reachable"
     else
       muster_check unhealthy snapserver "Snapserver is unreachable"
@@ -132,6 +140,7 @@ need_command bluetoothctl
 need_command pactl
 need_command snapclient
 need_command systemctl
+need_command timeout
 check_required_config
 for unit in \
   bt-audio-watch.service snapclient-bt@.service \
