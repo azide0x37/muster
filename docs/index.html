@@ -866,7 +866,7 @@ html.no-motion .law .mark { opacity: .9; transform: rotate(-4deg); transition: n
           <div class="ex-pipe"><svg id="pipeDvd" viewBox="0 0 560 150" role="img" aria-label="Pipeline: disc insert, udev, systemd rip job, work dir, atomic publish, NAS, eject"></svg></div>
           <div class="ex-foot">
             <a href="https://github.com/azide0x37/muster/tree/main/example/dvd-ingester" target="_blank" rel="noopener">example/dvd-ingester ↗</a>
-            <span class="ver">v1.0.3 · doctor: 12/12</span>
+            <span class="ver">v1.1.0 · object graph: 36 nodes</span>
           </div>
         </article>
 
@@ -877,7 +877,7 @@ html.no-motion .law .mark { opacity: .9; transform: rotate(-4deg); transition: n
               Snapcast carries the stream, PipeWire owns the local graph, and systemd reconnects
               the flaky last hop before anyone notices.</p>
             <div class="ex-tags">
-              <span class="ex-tag gold">T2R1.bluetooth-audio-gateway</span>
+              <span class="ex-tag gold">T2R1.bluetooth-audio-gateway · partial</span>
               <span class="ex-tag">T2C4.self-healing-reconnector</span>
               <span class="ex-tag">T2C5.local-sidecar-bridge</span>
             </div>
@@ -885,19 +885,50 @@ html.no-motion .law .mark { opacity: .9; transform: rotate(-4deg); transition: n
           <div class="ex-pipe"><svg id="pipeBt" viewBox="0 0 560 150" role="img" aria-label="Pipeline: Home Assistant, snapserver, snapclient on Pi, PipeWire, Bluetooth speaker"></svg></div>
           <div class="ex-foot">
             <a href="https://github.com/azide0x37/muster/tree/main/example/bt-audio-gateway" target="_blank" rel="noopener">example/bt-audio-gateway ↗</a>
-            <span class="ver">snapcast → pipewire → bt</span>
+            <span class="ver">v0.2.0 · snapcast → pipewire → bt</span>
           </div>
         </article>
       </div>
     </div>
   </section>
 
+  <!-- ======================= HOST INSPECTOR ======================= -->
+  <section class="block" id="inspector" data-title="§06 · Host Inspector">
+    <div class="wrap rule-top">
+      <p class="kicker reveal"><span class="idx">§06</span> One command · the whole box</p>
+      <h2 class="section-title reveal">The machine<br>explains itself</h2>
+      <p class="section-sub reveal">The first Muster implementation installs <code>muster</code>.
+        Every implementation then registers the same addressable object model: components,
+        recursive health, exact pattern trees, runtime state, and doctor evidence. The TUI is
+        merely the first window into that graph.</p>
+
+      <div class="terminal reveal" style="max-width:980px;margin-top:34px">
+        <div class="term-head"><span>muster · shed-pi-01</span><span class="right">read-only · 2 implementations</span></div>
+        <div class="term-body"><span class="ln fg">MUSTER  <span class="dim">SERVER INSPECTOR</span></span>
+<span class="ln fg">Muster implementations on shed-pi-01</span>
+<span class="ln ok">● HEALTHY   dvd-ingester <span class="dim">v1.1.0</span></span>
+<span class="ln dim">  ├─ systemd units · state · doctor evidence</span>
+<span class="ln dim">  └─ T2R4 Device-Triggered Conveyor</span>
+<span class="ln warn">◐ DEGRADED  bt-audio-gateway <span class="dim">v0.2.0 · T2R1 partial</span></span>
+<span class="ln dim">  ├─ watcher · snapclient · configuration</span>
+<span class="ln dim">  └─ explain: complete R4 state ledger remains</span>
+<span class="ln"> </span>
+<span class="ln cmt">↑↓ select · enter inspect · d doctor (root) · y confirm · r refresh · ? help · q quit</span></div>
+      </div>
+
+      <div class="hero-ctas reveal" style="margin-top:28px">
+        <a class="btn primary" href="https://github.com/azide0x37/muster/blob/main/docs/OBJECT_MODEL.md" target="_blank" rel="noopener">Read the object model</a>
+        <a class="btn" href="https://github.com/azide0x37/muster" target="_blank" rel="noopener">muster inspect --json</a>
+      </div>
+    </div>
+  </section>
+
   <!-- ======================= §06 CONTRACT ======================= -->
-  <section class="block" id="contract" data-title="§06 · The Contract">
+  <section class="block" id="contract" data-title="§07 · The Contract">
     <div class="wrap rule-top">
       <p class="kicker reveal"><span class="idx">§06</span> The contract · MUSTER.md is the law book</p>
       <h2 class="section-title reveal">The inspection<br>sheet</h2>
-      <p class="section-sub reveal">Fifteen clauses in the law book; these are the ones that hold the
+      <p class="section-sub reveal">The law book now includes the shared host inspector and object graph; these are the clauses that hold the
         roof up. A repo that can’t stamp every row doesn’t ship.</p>
 
       <div class="laws">
@@ -909,6 +940,7 @@ html.no-motion .law .mark { opacity: .9; transform: rotate(-4deg); transition: n
         <div class="law reveal"><span class="n">06</span><span class="txt">Updates verify SHA256, then earn their keep.<span class="why">Stage, flip, doctor. Fail the doctor and the symlink flips right back.</span></span><span class="mark">stamped</span></div>
         <div class="law reveal"><span class="n">07</span><span class="txt">doctor.sh proves health.<span class="why">A service that cannot demonstrate it is healthy is presumed haunted.</span></span><span class="mark">stamped</span></div>
         <div class="law reveal"><span class="n">08</span><span class="txt">The README self-certifies.<span class="why">A table of claims with evidence — and agent instructions that make Codex prove the repo is not merely plausible.</span></span><span class="mark">stamped</span></div>
+        <div class="law reveal"><span class="n">09</span><span class="txt">Every implementation explains itself through one graph.<span class="why">Globally addressable components, recursive health, exact release locks, and structured evidence feed every view.</span></span><span class="mark">stamped</span></div>
       </div>
 
       <div class="hero-ctas reveal" style="margin-top:30px">
@@ -936,6 +968,7 @@ html.no-motion .law .mark { opacity: .9; transform: rotate(-4deg); transition: n
             <tr><td>typeface</td><td class="ok">EMBEDDED</td><td>Saira Stencil One, subset, OFL · ~11 KB</td></tr>
             <tr><td>themes</td><td class="ok">2</td><td>TAPS (lights out) · REVEILLE (fall in at dawn)</td></tr>
             <tr><td>prefers-reduced-motion</td><td class="ok">HONORED</td><td>the instruments park themselves</td></tr>
+            <tr><td>host inspector object model</td><td class="ok">SHIPPED</td><td>one graph feeds the TUI, CLI, JSON export, and explanations</td></tr>
             <tr><td>passes muster</td><td class="ok">PASS</td><td>stamped, below and throughout</td></tr>
           </tbody>
         </table>
@@ -1316,6 +1349,8 @@ html.no-motion .law .mark { opacity: .9; transform: rotate(-4deg); transition: n
   $("railReset").addEventListener("click", () => railReset(false));
 
   /* ================= pattern library ================= */
+  // Marketing snapshot from muster-pattern-library@b0e9bee. Installed host
+  // inspection uses each release's verified muster.lock.json instead.
   const PATTERNS = [{"id":"C1.service-capsule","name":"Service Capsule","tech":1,"rarity":"common","mrl":9,"summary":"Run one well-bounded daemon or script as a managed service with explicit environment, user, restart, and logging behavior.","subs":[],"status":"stable"},{"id":"C2.persistent-tick","name":"Persistent Tick","tech":1,"rarity":"common","mrl":9,"summary":"Run recurring jobs with a timer that catches up after downtime and reports failure through a bounded oneshot service.","subs":[],"status":"stable"},{"id":"C3.dropfolder-trigger","name":"Dropfolder Trigger","tech":1,"rarity":"common","mrl":8,"summary":"React to files appearing in a watched folder and hand them to a safe processing service.","subs":[],"status":"stable"},{"id":"C4.lazy-resource-gate","name":"Lazy Resource Gate","tech":1,"rarity":"common","mrl":8,"summary":"Materialize a mount or network resource only when touched so boot does not depend on flaky external infrastructure.","subs":[],"status":"stable"},{"id":"C5.failure-ratchet","name":"Failure Ratchet","tech":1,"rarity":"common","mrl":7,"summary":"Turn service failure into a first-class event that can log, notify, quarantine, retry, or degrade deliberately.","subs":[],"status":"stable"},{"id":"C6.lifecycle-capsule","name":"Lifecycle Capsule","tech":1,"rarity":"common","mrl":8,"summary":"Install, verify, roll back, and cleanly uninstall one reviewed artifact bundle using a staged root, versioned release directory, current pointer, and preserved configuration.","subs":[],"status":"stable"},{"id":"M1.local-truth-sheaf","name":"Local Truth Sheaf","tech":1,"rarity":"mythic","mrl":4,"summary":"Have each unit report local truth and use a reducer to decide whether those facts glue into coherent machine state.","subs":[],"status":"stable"},{"id":"M2.holonomy-detector","name":"Holonomy Detector","tech":1,"rarity":"mythic","mrl":4,"summary":"Run a loop through expected states and detect whether the system actually returns to identity.","subs":[],"status":"stable"},{"id":"M3.simplicial-task-graph","name":"Simplicial Task Graph","tech":1,"rarity":"mythic","mrl":3,"summary":"Model target states as filled dependency shapes where missing faces explain why the desired state cannot exist.","subs":[],"status":"stable"},{"id":"M4.local-topos-runtime","name":"Local Topos Runtime","tech":1,"rarity":"mythic","mrl":2,"summary":"Treat targets as propositions, services as proofs, and observed paths or devices as evidence for valid local state.","subs":[],"status":"stable"},{"id":"M5.temporal-sheaf","name":"Temporal Sheaf","tech":1,"rarity":"mythic","mrl":3,"summary":"Glue persistent timers, snapshots, and boot/session facts so machines remember obligations across downtime.","subs":[],"status":"stable"},{"id":"R1.socket-anteroom","name":"Socket Anteroom","tech":1,"rarity":"rare","mrl":7,"summary":"Expose a local API or control endpoint through socket activation without keeping the backing service hot.","subs":[],"status":"stable"},{"id":"R2.device-binding","name":"Device Binding","tech":1,"rarity":"rare","mrl":6,"summary":"Attach service lifetime to the presence of a USB, serial, Bluetooth, camera, or other local device.","subs":[],"status":"stable"},{"id":"R3.cgroup-governor","name":"Cgroup Governor","tech":1,"rarity":"rare","mrl":6,"summary":"Constrain CPU, memory, IO, and restart behavior so one bad citizen cannot take down a small appliance.","subs":[],"status":"stable"},{"id":"R4.state-ledger","name":"State Ledger","tech":1,"rarity":"rare","mrl":6,"summary":"Make services explain themselves through journald and small runtime JSON facts under `/run/muster`.","subs":[],"status":"stable"},{"id":"R5.capability-mount","name":"Capability Mount","tech":1,"rarity":"rare","mrl":5,"summary":"Treat access to a resource such as NAS, secrets, cameras, or media as a capability with explicit ownership.","subs":[],"status":"stable"},{"id":"T2C1.hot-cold-nas-conveyor","name":"Hot/Cold NAS Conveyor","tech":2,"rarity":"common","mrl":8,"summary":"Keep hot local storage responsive while lazily moving cold output to NAS or other network storage.","subs":["C1.service-capsule","C2.persistent-tick","C4.lazy-resource-gate","C5.failure-ratchet"],"status":"usable"},{"id":"T2C2.dropfolder-spooler","name":"Dropfolder Spooler","tech":2,"rarity":"common","mrl":8,"summary":"Claim, process, and sort inbound files from a watched folder into done, failed, and log locations.","subs":["C1.service-capsule","C3.dropfolder-trigger","C5.failure-ratchet"],"status":"draft"},{"id":"T2C3.scheduled-herald","name":"Scheduled Herald","tech":2,"rarity":"common","mrl":8,"summary":"Periodically collect machine status and publish it as a runtime file, MOTD source, API payload, or notification.","subs":["C1.service-capsule","C2.persistent-tick","C5.failure-ratchet"],"status":"usable"},{"id":"T2C4.self-healing-reconnector","name":"Self-Healing Reconnector","tech":2,"rarity":"common","mrl":7,"summary":"Use a watcher and timer fallback to reconnect flaky resources without rebooting the whole machine.","subs":["C1.service-capsule","C2.persistent-tick","C5.failure-ratchet"],"status":"usable"},{"id":"T2C5.local-sidecar-bridge","name":"Local Sidecar Bridge","tech":2,"rarity":"common","mrl":7,"summary":"Poll or normalize a local subsystem and publish clean state outward through MQTT, HTTP, files, or another bridge.","subs":["C1.service-capsule","C2.persistent-tick","C5.failure-ratchet"],"status":"usable"},{"id":"T2R1.bluetooth-audio-gateway","name":"Bluetooth Audio Gateway","tech":2,"rarity":"rare","mrl":6,"summary":"Monitor a specific Bluetooth speaker, reconnect it, route audio, and expose honest state to a local control plane.","subs":["T2C4.self-healing-reconnector","T2C5.local-sidecar-bridge","R2.device-binding","R4.state-ledger"],"status":"draft"},{"id":"T2R2.lazy-capability-media-bus","name":"Lazy Capability Media Bus","tech":2,"rarity":"rare","mrl":5,"summary":"Expose media or storage through a lazy resource, cgroup limits, and an API anteroom that materializes capabilities on demand.","subs":["T2C1.hot-cold-nas-conveyor","R1.socket-anteroom","R3.cgroup-governor","R5.capability-mount"],"status":"draft"},{"id":"T2R3.edge-control-plane","name":"Edge Control Plane","tech":2,"rarity":"rare","mrl":5,"summary":"Combine watched jobs, device binding, socket activation, status ledgers, and outward state publishing for a Pi-local machine plane.","subs":["T2C2.dropfolder-spooler","T2C3.scheduled-herald","T2C5.local-sidecar-bridge","R1.socket-anteroom","R2.device-binding","R4.state-ledger"],"status":"draft"},{"id":"T2R4.device-triggered-conveyor","name":"Device-Triggered Conveyor","tech":2,"rarity":"rare","mrl":5,"summary":"Bind a physical device event to a bounded ingest job that waits for hot-storage capacity, proves cold-storage capability, stages local work, and hands output to a hot/cold conveyor.","subs":["C1.service-capsule","C2.persistent-tick","C4.lazy-resource-gate","C5.failure-ratchet","C6.lifecycle-capsule","R2.device-binding","R5.capability-mount","T2C1.hot-cold-nas-conveyor","T2C3.scheduled-herald"],"status":"stable"},{"id":"T2R5.signed-update-rail","name":"Signed Update Rail","tech":2,"rarity":"rare","mrl":5,"summary":"Poll a release manifest, verify artifact hashes, stage a new release, promote the current pointer, and roll back automatically when the doctor gate fails.","subs":["C2.persistent-tick","C5.failure-ratchet","C6.lifecycle-capsule","R4.state-ledger"],"status":"usable"},{"id":"T2R6.home-assistant-mqtt-bridge","name":"Home Assistant MQTT Bridge","tech":2,"rarity":"rare","mrl":5,"summary":"Publish Home Assistant MQTT discovery payloads, bridge appliance state into MQTT topics, and accept bounded control commands through a mockable local inbox before a real broker is enabled.","subs":["C1.service-capsule","C2.persistent-tick","C5.failure-ratchet","C6.lifecycle-capsule","R4.state-ledger","T2C5.local-sidecar-bridge"],"status":"usable"},{"id":"T2R7.ai-analysis-sidecar","name":"AI Analysis Sidecar","tech":2,"rarity":"rare","mrl":5,"summary":"Run opt-in AI analysis against bounded local appliance snapshots through an asynchronous systemd sidecar that writes local summaries and fails back to deterministic state.","subs":["C1.service-capsule","C2.persistent-tick","C5.failure-ratchet","T2C5.local-sidecar-bridge"],"status":"draft"},{"id":"T3C1.edge-appliance-bundle","name":"Edge Appliance Bundle","tech":3,"rarity":"common","mrl":7,"summary":"Turn a Raspberry Pi or similar host into a respectable local appliance with storage, status, recovery, and sidecar behavior.","subs":["T2C1.hot-cold-nas-conveyor","T2C3.scheduled-herald","T2C4.self-healing-reconnector","T2C5.local-sidecar-bridge"],"status":"usable"},{"id":"T3M1.machine-priest","name":"Machine Priest","tech":3,"rarity":"mythic","mrl":3,"summary":"Interpret local operational facts into a canonical truth document that can explain healthy, degraded, unsafe, or unknown state.","subs":["T3C1.edge-appliance-bundle","T3R1.multi-resource-orchestrator","M1.local-truth-sheaf","M5.temporal-sheaf"],"status":"draft"},{"id":"T3M2.ritualized-recovery-loop","name":"Ritualized Recovery Loop","tech":3,"rarity":"mythic","mrl":4,"summary":"Turn recovery into a staged sequence: observe, isolate, reset, rebind, validate, and rejoin.","subs":["C5.failure-ratchet","T2C4.self-healing-reconnector","R4.state-ledger","M2.holonomy-detector","M5.temporal-sheaf"],"status":"draft"},{"id":"T3M3.sheaf-of-services","name":"Sheaf of Services","tech":3,"rarity":"mythic","mrl":2,"summary":"Have services report local facts and let a gluing layer decide whether they form a coherent global machine state.","subs":["M1.local-truth-sheaf","M3.simplicial-task-graph","T2R3.edge-control-plane","T2C3.scheduled-herald"],"status":"draft"},{"id":"T3M4.holonomic-watchdog","name":"Holonomic Watchdog","tech":3,"rarity":"mythic","mrl":3,"summary":"Periodically walk a loop through expected states and detect whether the machine returns to identity.","subs":["M2.holonomy-detector","T2C3.scheduled-herald","T2C4.self-healing-reconnector","R4.state-ledger"],"status":"draft"},{"id":"T3M5.intent-bound-runtime","name":"Intent-Bound Runtime","tech":3,"rarity":"mythic","mrl":2,"summary":"Declare desired operational intent and let a disciplined runtime choose the service graph that satisfies it.","subs":["M4.local-topos-runtime","M5.temporal-sheaf","T2R3.edge-control-plane","R5.capability-mount"],"status":"draft"},{"id":"T3R1.multi-resource-orchestrator","name":"Multi-Resource Orchestrator","tech":3,"rarity":"rare","mrl":5,"summary":"Manage several flaky physical resources as one composed appliance with explicit ownership, degradation, and partial restart policy.","subs":["T3C1.edge-appliance-bundle","T2R1.bluetooth-audio-gateway","T2R2.lazy-capability-media-bus","T2R3.edge-control-plane","R2.device-binding","R4.state-ledger"],"status":"draft"}];
   const byId = {};
   PATTERNS.forEach((p) => (byId[p.id] = p));

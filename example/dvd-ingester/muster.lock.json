@@ -1,0 +1,841 @@
+{
+  "schema": "muster.lock/v1",
+  "source": {
+    "manifest_sha256": "7e26c814f4dda1eebc17690e25d17462096b62aab3c4a1cb62647623c678b9df",
+    "pattern_repository": "https://github.com/azide0x37/muster-pattern-library/tree/main",
+    "pattern_commit": "279573b65c7c72e6b3d4fb96e9d69edfc7f86aaf",
+    "pattern_roots": [
+      "T2R4.device-triggered-conveyor",
+      "T2R6.home-assistant-mqtt-bridge"
+    ]
+  },
+  "graph": {
+    "schema_version": "muster.runtime/v1",
+    "implementations": [
+      {
+        "id": "implementation:dvd-ingester",
+        "version": "1.1.0",
+        "summary": "Turns a ready optical disc into a bounded local rip and atomic cold-storage publication.",
+        "metadata": {
+          "project": "dvd-ingester"
+        },
+        "components": [
+          "implementation:dvd-ingester",
+          "component:dvd-ingester:services",
+          "component:dvd-ingester:udev:optical-trigger",
+          "component:dvd-ingester:unit:dvd-rip@.service",
+          "component:dvd-ingester:unit:dvd-publish-one.service",
+          "component:dvd-ingester:unit:dvd-publish-one.timer",
+          "component:dvd-ingester:unit:dvd-ingester-ha-mqtt.service",
+          "component:dvd-ingester:unit:dvd-ingester-ha-mqtt.timer",
+          "component:dvd-ingester:unit:dvd-ingester-doctor.service",
+          "component:dvd-ingester:unit:dvd-ingester-doctor.timer",
+          "component:dvd-ingester:unit:dvd-ingester-update.service",
+          "component:dvd-ingester:unit:dvd-ingester-update.timer",
+          "component:dvd-ingester:state",
+          "component:dvd-ingester:state:rip",
+          "component:dvd-ingester:state:handoff",
+          "component:dvd-ingester:state:publish",
+          "component:dvd-ingester:state:ha-mqtt",
+          "component:dvd-ingester:doctor",
+          "component:dvd-ingester:configuration",
+          "component:dvd-ingester:config:environment",
+          "component:dvd-ingester:config:mqtt",
+          "component:dvd-ingester:release",
+          "component:dvd-ingester:patterns",
+          "pattern:dvd-ingester:T2R4.device-triggered-conveyor",
+          "pattern:dvd-ingester:T2R6.home-assistant-mqtt-bridge",
+          "pattern:dvd-ingester:T2C1.hot-cold-nas-conveyor",
+          "pattern:dvd-ingester:T2C3.scheduled-herald",
+          "pattern:dvd-ingester:T2C5.local-sidecar-bridge",
+          "pattern:dvd-ingester:C1.service-capsule",
+          "pattern:dvd-ingester:C2.persistent-tick",
+          "pattern:dvd-ingester:C4.lazy-resource-gate",
+          "pattern:dvd-ingester:C5.failure-ratchet",
+          "pattern:dvd-ingester:C6.lifecycle-capsule",
+          "pattern:dvd-ingester:R2.device-binding",
+          "pattern:dvd-ingester:R4.state-ledger",
+          "pattern:dvd-ingester:R5.capability-mount"
+        ]
+      }
+    ],
+    "components": [
+      {
+        "id": "component:dvd-ingester:config:environment",
+        "kind": "config.file",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Ingest, capacity, and destination settings.",
+        "what": "The root-managed settings for devices, hot capacity, and cold destination.",
+        "why": "Safety margins and storage paths are host policy rather than release contents."
+      },
+      {
+        "id": "component:dvd-ingester:config:mqtt",
+        "kind": "config.file",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Home Assistant MQTT settings and credentials.",
+        "what": "The protected broker and discovery configuration for the Home Assistant bridge.",
+        "why": "MQTT credentials require tighter ownership and an independent integration boundary."
+      },
+      {
+        "id": "component:dvd-ingester:configuration",
+        "kind": "component.group",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Preserved operator configuration surfaces.",
+        "children": [
+          "component:dvd-ingester:config:environment",
+          "component:dvd-ingester:config:mqtt"
+        ],
+        "what": "The operator-owned ingest, storage, and MQTT settings preserved across releases.",
+        "why": "Machine-specific policy and credentials must remain outside immutable artifacts."
+      },
+      {
+        "id": "component:dvd-ingester:doctor",
+        "kind": "doctor",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Latest structured runtime inspection of the whole appliance.",
+        "actions": [
+          {
+            "id": "action:dvd-ingester:doctor.run",
+            "kind": "doctor.run",
+            "label": "Run doctor",
+            "target": "component:dvd-ingester:doctor",
+            "requires_root": true,
+            "requires_confirmation": true
+          }
+        ],
+        "what": "Timestamped evidence about installed units, configuration, state freshness, and storage capability.",
+        "why": "Doctor is evidence in the graph, not a privileged special page."
+      },
+      {
+        "id": "component:dvd-ingester:patterns",
+        "kind": "pattern.tree",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Exact T2R4 and T2R6 pattern closure at the verified MPL commit.",
+        "metadata": {
+          "closure_nodes": "13",
+          "source_commit": "279573b65c7c72e6b3d4fb96e9d69edfc7f86aaf"
+        },
+        "children": [
+          "pattern:dvd-ingester:T2R4.device-triggered-conveyor",
+          "pattern:dvd-ingester:T2R6.home-assistant-mqtt-bridge"
+        ],
+        "what": "The locked Muster pattern closure claimed by this ingester release.",
+        "why": "Operators should see the reusable design obligations behind the installed components."
+      },
+      {
+        "id": "component:dvd-ingester:release",
+        "kind": "release.current",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Atomically selected active DVD Ingester release.",
+        "what": "The active immutable release selected by one symlink.",
+        "why": "Failed doctor evidence can roll an update back without mutating either release."
+      },
+      {
+        "id": "component:dvd-ingester:services",
+        "kind": "component.group",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Units and device trigger owned by the implementation.",
+        "children": [
+          "component:dvd-ingester:udev:optical-trigger",
+          "component:dvd-ingester:unit:dvd-rip@.service",
+          "component:dvd-ingester:unit:dvd-publish-one.service",
+          "component:dvd-ingester:unit:dvd-publish-one.timer",
+          "component:dvd-ingester:unit:dvd-ingester-ha-mqtt.service",
+          "component:dvd-ingester:unit:dvd-ingester-ha-mqtt.timer",
+          "component:dvd-ingester:unit:dvd-ingester-doctor.service",
+          "component:dvd-ingester:unit:dvd-ingester-doctor.timer",
+          "component:dvd-ingester:unit:dvd-ingester-update.service",
+          "component:dvd-ingester:unit:dvd-ingester-update.timer"
+        ],
+        "what": "The complete lifecycle surface that turns device events into managed work.",
+        "why": "udev only signals readiness; systemd owns every long-running or scheduled action."
+      },
+      {
+        "id": "component:dvd-ingester:state",
+        "kind": "component.group",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Inspectable operational facts emitted by bounded workers.",
+        "children": [
+          "component:dvd-ingester:state:rip",
+          "component:dvd-ingester:state:handoff",
+          "component:dvd-ingester:state:publish",
+          "component:dvd-ingester:state:ha-mqtt"
+        ],
+        "what": "Transitional legacy JSON facts under the implementation runtime directory.",
+        "why": "The TUI can expose current work without understanding DVD-specific phases."
+      },
+      {
+        "id": "component:dvd-ingester:state:ha-mqtt",
+        "kind": "state.legacy-json",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Last Home Assistant bridge projection.",
+        "what": "The latest state and health projection produced for Home Assistant.",
+        "why": "MQTT visibility must be diagnosable separately from the ingest conveyor itself."
+      },
+      {
+        "id": "component:dvd-ingester:state:handoff",
+        "kind": "state.legacy-json",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Hot-storage handoff readiness.",
+        "what": "The durable-local fact that completed media is ready for cold publication.",
+        "why": "Rip completion and cold-storage availability are independent failure boundaries."
+      },
+      {
+        "id": "component:dvd-ingester:state:publish",
+        "kind": "state.legacy-json",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Most recent cold-storage publish result.",
+        "what": "The most recent result from moving one handoff into cold storage.",
+        "why": "Publication failures must remain inspectable without rerunning the extraction."
+      },
+      {
+        "id": "component:dvd-ingester:state:rip",
+        "kind": "state.legacy-json",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Current or most recent extraction state.",
+        "what": "The latest bounded extraction state emitted by the rip worker.",
+        "why": "Operators need to distinguish active, completed, and failed media reads."
+      },
+      {
+        "id": "component:dvd-ingester:udev:optical-trigger",
+        "kind": "udev.rule",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Delegates optical-media readiness to the rip service template.",
+        "what": "The udev rule that turns a ready optical drive into a systemd job request.",
+        "why": "Device discovery must stay brief and delegate long extraction work immediately."
+      },
+      {
+        "id": "component:dvd-ingester:unit:dvd-ingester-doctor.service",
+        "kind": "systemd.service",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Produces one structured runtime health observation.",
+        "what": "A oneshot service that records appliance checks as a Muster observation.",
+        "why": "Health evidence needs a supervised execution boundary and durable journal context."
+      },
+      {
+        "id": "component:dvd-ingester:unit:dvd-ingester-doctor.timer",
+        "kind": "systemd.timer",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Schedules recurring runtime evidence.",
+        "what": "The persistent schedule for recurring ingester health observations.",
+        "why": "Storage, devices, and configuration can drift when no ingest job is running."
+      },
+      {
+        "id": "component:dvd-ingester:unit:dvd-ingester-ha-mqtt.service",
+        "kind": "systemd.service",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Publishes one Home Assistant discovery and state refresh.",
+        "what": "A oneshot projection of ingester discovery, state, and bounded controls to MQTT.",
+        "why": "Home Assistant integration should observe the appliance without owning its workflow."
+      },
+      {
+        "id": "component:dvd-ingester:unit:dvd-ingester-ha-mqtt.timer",
+        "kind": "systemd.timer",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Refreshes the bounded MQTT bridge state.",
+        "what": "The persistent schedule for refreshing the Home Assistant MQTT projection.",
+        "why": "Discovery and retained state must be republished after broker or host downtime."
+      },
+      {
+        "id": "component:dvd-ingester:unit:dvd-ingester-update.service",
+        "kind": "systemd.service",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Performs one verified, rollback-gated release update.",
+        "what": "A bounded service that verifies, switches, and health-gates one release update.",
+        "why": "An invalid release must restore the prior graph and executable atomically."
+      },
+      {
+        "id": "component:dvd-ingester:unit:dvd-ingester-update.timer",
+        "kind": "systemd.timer",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Polls for reviewed releases on a persistent schedule.",
+        "what": "The persistent schedule that starts reviewed release checks.",
+        "why": "Update polling should survive reboots without a resident updater process."
+      },
+      {
+        "id": "component:dvd-ingester:unit:dvd-publish-one.service",
+        "kind": "systemd.service",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Moves one completed hot item to cold storage atomically.",
+        "what": "A oneshot worker that publishes one completed handoff to cold storage.",
+        "why": "One-item atomic moves keep retries bounded and prevent partial library entries."
+      },
+      {
+        "id": "component:dvd-ingester:unit:dvd-publish-one.timer",
+        "kind": "systemd.timer",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Persists the hot-to-cold drain obligation across downtime.",
+        "what": "The persistent schedule that drains completed hot-storage handoffs.",
+        "why": "Cold storage may return after an outage, so publication must retry after downtime."
+      },
+      {
+        "id": "component:dvd-ingester:unit:dvd-rip@.service",
+        "kind": "systemd.template",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "One bounded extraction job for one optical device.",
+        "what": "A parameterized oneshot service invoked for a ready drive.",
+        "why": "Device events remain short while extraction gets systemd supervision and logs."
+      },
+      {
+        "id": "implementation:dvd-ingester",
+        "kind": "implementation",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Turns a ready optical disc into a bounded local rip and atomic cold-storage publication.",
+        "children": [
+          "component:dvd-ingester:services",
+          "component:dvd-ingester:state",
+          "component:dvd-ingester:doctor",
+          "component:dvd-ingester:configuration",
+          "component:dvd-ingester:release",
+          "component:dvd-ingester:patterns"
+        ],
+        "what": "A device-triggered ingest appliance with explicit hot-storage, cold-storage, and Home Assistant boundaries.",
+        "why": "Long media work must survive unreliable devices and storage without becoming an opaque shell-script chain.",
+        "responsibilities": [
+          "bind optical-device readiness to one bounded systemd job",
+          "preserve local work until cold storage is proven and writable",
+          "publish operational state and bounded controls through MQTT"
+        ],
+        "failure_modes": [
+          {
+            "id": "failure-1",
+            "summary": "optical media cannot be read or fingerprinted"
+          },
+          {
+            "id": "failure-2",
+            "summary": "hot local capacity falls below the configured safety margin"
+          },
+          {
+            "id": "failure-3",
+            "summary": "cold storage is unavailable or loses capability during publication"
+          },
+          {
+            "id": "failure-4",
+            "summary": "MQTT is enabled but the broker cannot be reached"
+          }
+        ]
+      },
+      {
+        "id": "pattern:dvd-ingester:C1.service-capsule",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Service Capsule",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "what": "The systemd service boundary around one ingester responsibility.",
+        "why": "Supervision, logging, privileges, and restart behavior need an explicit owner."
+      },
+      {
+        "id": "pattern:dvd-ingester:C2.persistent-tick",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Persistent Tick",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "what": "The persistent timer mechanism behind publish, doctor, bridge, and update work.",
+        "why": "Scheduled obligations must resume after downtime without polling daemons."
+      },
+      {
+        "id": "pattern:dvd-ingester:C4.lazy-resource-gate",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Lazy Resource Gate",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "what": "The gate that checks hot capacity and cold-storage capability only when needed.",
+        "why": "Optional or intermittent storage must not become a permanent startup dependency."
+      },
+      {
+        "id": "pattern:dvd-ingester:C5.failure-ratchet",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Failure Ratchet",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "what": "The retained state and evidence that keep conveyor failures visible.",
+        "why": "A later successful timer run must not erase the reason earlier work stopped."
+      },
+      {
+        "id": "pattern:dvd-ingester:C6.lifecycle-capsule",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Lifecycle Capsule",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "what": "The versioned install, atomic current link, and rollback lifecycle contract.",
+        "why": "Releases must switch as one unit while operator configuration remains preserved."
+      },
+      {
+        "id": "pattern:dvd-ingester:R2.device-binding",
+        "kind": "pattern.rare",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Device Binding",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "what": "The binding from a ready optical-device event to its parameterized rip job.",
+        "why": "Each removable drive event must start exactly the work for that device."
+      },
+      {
+        "id": "pattern:dvd-ingester:R4.state-ledger",
+        "kind": "pattern.rare",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "State Ledger",
+        "metadata": {
+          "coverage": "partial",
+          "limitation": "Legacy runtime facts are migrating to observation envelopes."
+        },
+        "what": "The partially modernized record of rip, handoff, publish, bridge, and doctor facts.",
+        "why": "Cross-stage progress and failure evidence must survive individual process exits."
+      },
+      {
+        "id": "pattern:dvd-ingester:R5.capability-mount",
+        "kind": "pattern.rare",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Capability Mount",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "what": "The verified cold-storage capability required immediately before publication.",
+        "why": "A configured path is not proof that the intended mounted destination is usable."
+      },
+      {
+        "id": "pattern:dvd-ingester:T2C1.hot-cold-nas-conveyor",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Hot/Cold NAS Conveyor",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "children": [
+          "pattern:dvd-ingester:C1.service-capsule",
+          "pattern:dvd-ingester:C2.persistent-tick",
+          "pattern:dvd-ingester:C4.lazy-resource-gate",
+          "pattern:dvd-ingester:C5.failure-ratchet"
+        ],
+        "what": "The conveyor that buffers completed media locally before atomic cold publication.",
+        "why": "Extraction must finish safely even when the configured NAS is temporarily absent."
+      },
+      {
+        "id": "pattern:dvd-ingester:T2C3.scheduled-herald",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Scheduled Herald",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "children": [
+          "pattern:dvd-ingester:C1.service-capsule",
+          "pattern:dvd-ingester:C2.persistent-tick",
+          "pattern:dvd-ingester:C5.failure-ratchet"
+        ],
+        "what": "The scheduled pattern used to announce health, updates, and bridge state.",
+        "why": "Recurring obligations need visible timers and bounded oneshot workers."
+      },
+      {
+        "id": "pattern:dvd-ingester:T2C5.local-sidecar-bridge",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Local Sidecar Bridge",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "children": [
+          "pattern:dvd-ingester:C1.service-capsule",
+          "pattern:dvd-ingester:C2.persistent-tick",
+          "pattern:dvd-ingester:C5.failure-ratchet"
+        ],
+        "what": "The sidecar pattern that translates local runtime facts into MQTT messages.",
+        "why": "Broker failures must not block or reshape the core ingest conveyor."
+      },
+      {
+        "id": "pattern:dvd-ingester:T2R4.device-triggered-conveyor",
+        "kind": "pattern.rare",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Device-Triggered Conveyor",
+        "metadata": {
+          "coverage": "complete",
+          "maturity": "stable",
+          "role": "primary"
+        },
+        "children": [
+          "pattern:dvd-ingester:C1.service-capsule",
+          "pattern:dvd-ingester:C2.persistent-tick",
+          "pattern:dvd-ingester:C4.lazy-resource-gate",
+          "pattern:dvd-ingester:C5.failure-ratchet",
+          "pattern:dvd-ingester:C6.lifecycle-capsule",
+          "pattern:dvd-ingester:R2.device-binding",
+          "pattern:dvd-ingester:R5.capability-mount",
+          "pattern:dvd-ingester:T2C1.hot-cold-nas-conveyor",
+          "pattern:dvd-ingester:T2C3.scheduled-herald"
+        ],
+        "what": "The primary pattern connecting optical readiness to bounded rip and publication work.",
+        "why": "Removable media and cold storage require explicit handoffs between unreliable stages."
+      },
+      {
+        "id": "pattern:dvd-ingester:T2R6.home-assistant-mqtt-bridge",
+        "kind": "pattern.rare",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Home Assistant MQTT Bridge",
+        "metadata": {
+          "coverage": "complete",
+          "maturity": "usable",
+          "role": "integration"
+        },
+        "children": [
+          "pattern:dvd-ingester:C1.service-capsule",
+          "pattern:dvd-ingester:C2.persistent-tick",
+          "pattern:dvd-ingester:C5.failure-ratchet",
+          "pattern:dvd-ingester:C6.lifecycle-capsule",
+          "pattern:dvd-ingester:R4.state-ledger",
+          "pattern:dvd-ingester:T2C5.local-sidecar-bridge"
+        ],
+        "what": "The integration pattern projecting appliance state and bounded controls through MQTT.",
+        "why": "Home Assistant should integrate through a sidecar contract rather than own core work."
+      }
+    ],
+    "edges": [
+      {
+        "from": "component:dvd-ingester:doctor",
+        "type": "observes",
+        "to": "component:dvd-ingester:services"
+      },
+      {
+        "from": "component:dvd-ingester:doctor",
+        "type": "observes",
+        "to": "component:dvd-ingester:state"
+      },
+      {
+        "from": "component:dvd-ingester:udev:optical-trigger",
+        "type": "implements",
+        "to": "pattern:dvd-ingester:R2.device-binding"
+      },
+      {
+        "from": "component:dvd-ingester:udev:optical-trigger",
+        "type": "produces",
+        "to": "component:dvd-ingester:unit:dvd-rip@.service",
+        "summary": "Device readiness produces one bounded rip job."
+      },
+      {
+        "from": "component:dvd-ingester:unit:dvd-ingester-ha-mqtt.service",
+        "type": "implements",
+        "to": "pattern:dvd-ingester:T2R6.home-assistant-mqtt-bridge"
+      },
+      {
+        "from": "component:dvd-ingester:unit:dvd-ingester-ha-mqtt.service",
+        "type": "observes",
+        "to": "component:dvd-ingester:state"
+      },
+      {
+        "from": "component:dvd-ingester:unit:dvd-publish-one.service",
+        "type": "consumes",
+        "to": "component:dvd-ingester:state:handoff"
+      },
+      {
+        "from": "component:dvd-ingester:unit:dvd-publish-one.service",
+        "type": "implements",
+        "to": "pattern:dvd-ingester:T2C1.hot-cold-nas-conveyor"
+      },
+      {
+        "from": "component:dvd-ingester:unit:dvd-publish-one.service",
+        "type": "produces",
+        "to": "component:dvd-ingester:state:publish"
+      },
+      {
+        "from": "component:dvd-ingester:unit:dvd-rip@.service",
+        "type": "produces",
+        "to": "component:dvd-ingester:state:handoff"
+      },
+      {
+        "from": "component:dvd-ingester:unit:dvd-rip@.service",
+        "type": "produces",
+        "to": "component:dvd-ingester:state:rip"
+      },
+      {
+        "from": "implementation:dvd-ingester",
+        "type": "owns",
+        "to": "component:dvd-ingester:configuration"
+      },
+      {
+        "from": "implementation:dvd-ingester",
+        "type": "owns",
+        "to": "component:dvd-ingester:doctor"
+      },
+      {
+        "from": "implementation:dvd-ingester",
+        "type": "owns",
+        "to": "component:dvd-ingester:patterns"
+      },
+      {
+        "from": "implementation:dvd-ingester",
+        "type": "owns",
+        "to": "component:dvd-ingester:release"
+      },
+      {
+        "from": "implementation:dvd-ingester",
+        "type": "owns",
+        "to": "component:dvd-ingester:services"
+      },
+      {
+        "from": "implementation:dvd-ingester",
+        "type": "owns",
+        "to": "component:dvd-ingester:state"
+      }
+    ]
+  },
+  "adapters": {
+    "component:dvd-ingester:config:environment": {
+      "adapter": "metadata.file",
+      "path": "/etc/dvd-ingester/dvd-ingester.env",
+      "required": true
+    },
+    "component:dvd-ingester:config:mqtt": {
+      "adapter": "metadata.file",
+      "path": "/etc/dvd-ingester/dvd-ingester.mqtt.env",
+      "required": true
+    },
+    "component:dvd-ingester:configuration": {},
+    "component:dvd-ingester:doctor": {
+      "adapter": "observation.file",
+      "state_file": "/run/muster/dvd-ingester/observations/doctor.json",
+      "absent_status": "unknown",
+      "max_age_seconds": 7200
+    },
+    "component:dvd-ingester:patterns": {},
+    "component:dvd-ingester:release": {
+      "adapter": "release.current",
+      "path": "/opt/dvd-ingester/current",
+      "required": true
+    },
+    "component:dvd-ingester:services": {},
+    "component:dvd-ingester:state": {},
+    "component:dvd-ingester:state:ha-mqtt": {
+      "adapter": "legacy.json",
+      "path": "/run/dvd-ingester/ha-mqtt-state.json",
+      "absent_status": "healthy",
+      "max_age_seconds": 300,
+      "status_field": "health",
+      "status_map": {
+        "degraded": "degraded",
+        "failed": "unhealthy",
+        "healthy": "healthy"
+      }
+    },
+    "component:dvd-ingester:state:handoff": {
+      "adapter": "legacy.json",
+      "path": "/run/dvd-ingester/handoff.json",
+      "absent_status": "healthy",
+      "max_age_seconds": 86400
+    },
+    "component:dvd-ingester:state:publish": {
+      "adapter": "legacy.json",
+      "path": "/run/dvd-ingester/publish.json",
+      "absent_status": "healthy",
+      "max_age_seconds": 86400,
+      "status_field": "state",
+      "status_map": {
+        "failed": "unhealthy",
+        "idle": "healthy",
+        "published": "healthy"
+      }
+    },
+    "component:dvd-ingester:state:rip": {
+      "adapter": "legacy.json",
+      "path": "/run/dvd-ingester/rip.json",
+      "absent_status": "healthy",
+      "max_age_seconds": 43200,
+      "status_field": "state",
+      "status_map": {
+        "active": "healthy",
+        "completed": "healthy",
+        "failed": "unhealthy"
+      }
+    },
+    "component:dvd-ingester:udev:optical-trigger": {
+      "adapter": "metadata.file",
+      "path": "/etc/udev/rules.d/90-dvd-ingester.rules",
+      "required": true
+    },
+    "component:dvd-ingester:unit:dvd-ingester-doctor.service": {
+      "adapter": "systemd.unit",
+      "unit": "dvd-ingester-doctor.service",
+      "role": "oneshot",
+      "allow_inactive": true
+    },
+    "component:dvd-ingester:unit:dvd-ingester-doctor.timer": {
+      "adapter": "systemd.unit",
+      "unit": "dvd-ingester-doctor.timer",
+      "role": "timer"
+    },
+    "component:dvd-ingester:unit:dvd-ingester-ha-mqtt.service": {
+      "adapter": "systemd.unit",
+      "unit": "dvd-ingester-ha-mqtt.service",
+      "role": "oneshot",
+      "allow_inactive": true
+    },
+    "component:dvd-ingester:unit:dvd-ingester-ha-mqtt.timer": {
+      "adapter": "systemd.unit",
+      "unit": "dvd-ingester-ha-mqtt.timer",
+      "role": "timer"
+    },
+    "component:dvd-ingester:unit:dvd-ingester-update.service": {
+      "adapter": "systemd.unit",
+      "unit": "dvd-ingester-update.service",
+      "role": "oneshot",
+      "allow_inactive": true
+    },
+    "component:dvd-ingester:unit:dvd-ingester-update.timer": {
+      "adapter": "systemd.unit",
+      "unit": "dvd-ingester-update.timer",
+      "role": "timer"
+    },
+    "component:dvd-ingester:unit:dvd-publish-one.service": {
+      "adapter": "systemd.unit",
+      "unit": "dvd-publish-one.service",
+      "role": "oneshot",
+      "allow_inactive": true
+    },
+    "component:dvd-ingester:unit:dvd-publish-one.timer": {
+      "adapter": "systemd.unit",
+      "unit": "dvd-publish-one.timer",
+      "role": "timer"
+    },
+    "component:dvd-ingester:unit:dvd-rip@.service": {
+      "adapter": "systemd.unit",
+      "unit": "dvd-rip@.service",
+      "role": "template",
+      "allow_inactive": true
+    },
+    "pattern:dvd-ingester:C1.service-capsule": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:C2.persistent-tick": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:C4.lazy-resource-gate": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:C5.failure-ratchet": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:C6.lifecycle-capsule": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:R2.device-binding": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:R4.state-ledger": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:R5.capability-mount": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:T2C1.hot-cold-nas-conveyor": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:T2C3.scheduled-herald": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:T2C5.local-sidecar-bridge": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:T2R4.device-triggered-conveyor": {
+      "adapter": "pattern"
+    },
+    "pattern:dvd-ingester:T2R6.home-assistant-mqtt-bridge": {
+      "adapter": "pattern"
+    }
+  },
+  "actions": {
+    "action:dvd-ingester:doctor.run": {
+      "component_id": "component:dvd-ingester:doctor",
+      "spec": {
+        "id": "action:dvd-ingester:doctor.run",
+        "label": "Run doctor",
+        "kind": "doctor.run",
+        "command": [
+          "/opt/dvd-ingester/current/bin/doctor.sh",
+          "--runtime"
+        ],
+        "requires_root": true
+      }
+    }
+  }
+}

@@ -113,12 +113,16 @@ Concrete Muster implementations live under `example/<name>/`. A generated implem
   RELEASE.md
   SECURITY.md
   muster.yaml
+  muster.lock.json
   Makefile
   bin/
     install.sh
     uninstall.sh
     update.sh
     doctor.sh
+    muster-bootstrap.sh
+    muster-observation.sh
+    release-transaction.sh
     render-units.sh
   etc/
     <project>.env.example
@@ -138,11 +142,81 @@ The exact service code changes by project. The operational skeleton does not.
 
 Each example is a self-contained `impl muster` project with its own installer, updater, doctor, tests, release artifacts, and README self-certification.
 
+## Muster On A Box
+
+Installing the first Muster implementation installs an independently versioned
+host inspector and places one managed command in PATH:
+
+```text
+/usr/local/bin/muster -> ../../../opt/muster/current/bin/muster
+/opt/muster/current -> releases/<core-version>
+/etc/muster/implementations.d/<project>.json
+```
+
+The 0.1 core is install-once and shared: later implementation installs do not
+downgrade or silently replace it, and uninstalling the last implementation
+leaves it intact. Automatic core upgrade/removal is intentionally deferred to
+an explicit operator-management surface rather than being owned by whichever
+service happened to install next.
+
+Run `muster` in a terminal to open the full-screen inspector. It presents the
+Muster implementations on the current server, recursively derived health,
+systemd components, runtime state, the exact pattern tree claimed by each
+release, structured doctor evidence, and literate answers to “what is this?”
+and “why is it here?”
+
+The same object graph remains available without a TTY:
+
+```sh
+muster list
+muster status dvd-ingester
+muster inspect component:dvd-ingester:state:publish
+muster explain component:dvd-ingester:unit:dvd-publish-one.service
+muster inspect action:dvd-ingester:doctor.run
+sudo muster doctor dvd-ingester
+muster export --json
+```
+
+All inspection commands accept `--json`. `--root <path>` inspects a staged
+installation without chrooting, which is also how the lifecycle tests prove
+multi-service ownership.
+
+### One Object Model
+
+The TUI is the first renderer for Muster's reference runtime model—not a
+collection of application-specific pages. Every implementation projects into
+globally addressable components with:
+
+- identity, kind, summary, metadata, actions, and children
+- declared and recursively effective `healthy`, `degraded`, `unhealthy`, or
+  `unknown` health, with causal paths preserved
+- typed `depends_on`, `implements`, `owns`, `produces`, `consumes`, `observes`,
+  and `configures` graph edges
+- timestamped observations, checks, and artifacts
+- literate purpose, responsibilities, and failure modes
+
+`muster.yaml` schema 2 is the human-authored declaration.
+`muster.lock.json` is produced with `muster compile muster.yaml` and freezes the
+deterministic release graph plus adapter declarations. A tiny registration
+points at the active release, so switching `/opt/<project>/current` also
+switches the inspected object model.
+
+Doctor is ordinary evidence in that graph. Implementations emit the common
+`muster.observation/v1` envelope under
+`/run/muster/<project>/observations/doctor.json`; the inspector never needs to
+learn application-specific doctor output.
+
+The initial view is read-only and performs no network requests. Running a
+doctor is an explicit, root-required action because it updates root-owned
+evidence under `/run/muster`; ordinary inspection remains unprivileged. Future
+web, API, Grafana, or editor views can consume the same exported graph rather
+than reimplementing discovery.
+
 ## Website
 
 The project site lives at [`docs/index.html`](docs/index.html): one static file, no build step, zero runtime requests. It explains the concept, walks the systemd lifecycle with a live model of the rollback-aware update rail, diagrams the pattern library from the real MPL manifests, and inspects script-vs-muster A/B scenarios.
 
-Serve it locally with `python3 -m http.server -d docs`, or point GitHub Pages at `main` / `docs/`. The page ends with its own self-certification table, as is the law.
+Serve it locally with `uv run python -m http.server -d docs`, or point GitHub Pages at `main` / `docs/`. The page ends with its own self-certification table, as is the law.
 
 ## Brand Assets
 
@@ -175,10 +249,14 @@ The formal contract lives in [`MUSTER.md`](MUSTER.md). The short version:
 - installers are idempotent.
 - updates verify SHA256 and roll back on failed health checks.
 - matching MPL atoms are documented in `muster.yaml`, `MUSTER.md`, or the README.
+- the first installed implementation bootstraps the shared inspector and every implementation owns only its registration.
+- static structure compiles into a deterministic lock while live adapters produce generic observations.
 - Python is used only when it is clearly superior to shell, and then through `uv`.
 - the README self-certifies compliance.
 
 The README is the front door. `MUSTER.md` is the law book.
+[`docs/OBJECT_MODEL.md`](docs/OBJECT_MODEL.md) is the runtime ontology shared by
+the CLI, TUI, JSON export, and future presentation layers.
 
 ## Test Everything
 
@@ -207,3 +285,22 @@ It is not trying to solve enterprise deployment.
 It is for the neglected middle zone: small Linux appliances, Raspberry Pi services, home-lab helpers, office automations, data-ingest boxes, and weird little tools that are too useful to leave as loose scripts.
 
 Small tools deserve boring operational discipline. Muster makes that discipline repeatable.
+
+## Muster Self-Certification
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| systemd owns implementation lifecycle | PASS | Example `systemd/*.service` and `*.timer` units |
+| shared command has independent versioned ownership | PASS | `/opt/muster/releases`, `current`, and managed PATH link in `muster-bootstrap.sh` |
+| first service installs the command | PASS | Both example installers call `muster-bootstrap.sh ensure` |
+| implementations register independently | PASS | `/etc/muster/implementations.d/*.json` staged lifecycle tests |
+| uninstall cannot remove another inspection surface | PASS | Both install orders and uninstall orders in `tests/test_shared_muster_lifecycle.sh` |
+| one normalized component graph backs CLI and TUI | PASS | `internal/model`, `internal/inspector`, `internal/cli`, and `internal/tui` |
+| recursive health and typed relationships exist | PASS | Model fixed-point and explanation tests |
+| doctor emits structured evidence | PASS | `muster.observation/v1` helpers and example doctor tests |
+| pattern trees are release-specific | PASS | Schema 2 manifests and deterministic locks with verified MPL commits |
+| installer and shared-core idempotence are tested | PASS | Example idempotence and concurrent cross-service bootstrap tests |
+| project releases publish immutably and roll back transactionally | PASS | `release-transaction.sh`, project lifecycle regression tests |
+| core artifacts are checksummed and safe to unpack | PASS | Platform manifests, archive verification, and bad-checksum staged test |
+| test suite passes | PASS | `make test` |
+| release artifacts build | PASS | `make package` and `tests/test_core_packages.sh` |

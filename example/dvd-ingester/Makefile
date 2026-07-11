@@ -14,6 +14,7 @@ test:
 	./tests/test_units.sh
 	./tests/test_udev_rule.sh
 	./tests/test_installer_idempotent.sh
+	./tests/test_release_security.sh
 	./tests/test_update_doctor_logging.sh
 	./tests/test_conveyor_flow.sh
 	./tests/test_ha_mqtt_bridge.sh
@@ -32,13 +33,13 @@ changelog:
 
 package: changelog clean
 	mkdir -p "$(PACKAGE_ROOT)"
-	cp -R AGENTS.md CHANGELOG.md CODEX_TASK.md MUSTER.md README.md RELEASE.md SECURITY.md VERSION muster.yaml bin etc src systemd udev tests "$(PACKAGE_ROOT)/"
+	cp -R AGENTS.md CHANGELOG.md CODEX_TASK.md MUSTER.md README.md RELEASE.md SECURITY.md VERSION muster.yaml muster.lock.json bin etc src systemd udev tests "$(PACKAGE_ROOT)/"
 	cp src/dvd-rip-one src/dvd-publish-one src/dvd-control src/dvd-ha-mqtt-bridge "$(PACKAGE_ROOT)/bin/"
 	find "$(PACKAGE_ROOT)" -type f -name '*.sh' -exec chmod 0755 {} \;
 	chmod 0755 "$(PACKAGE_ROOT)/src/dvd-rip-one" "$(PACKAGE_ROOT)/src/dvd-publish-one" "$(PACKAGE_ROOT)/src/dvd-control" "$(PACKAGE_ROOT)/src/dvd-ha-mqtt-bridge" "$(PACKAGE_ROOT)/bin/dvd-rip-one" "$(PACKAGE_ROOT)/bin/dvd-publish-one" "$(PACKAGE_ROOT)/bin/dvd-control" "$(PACKAGE_ROOT)/bin/dvd-ha-mqtt-bridge"
 	COPYFILE_DISABLE=1 tar --no-xattrs -C "$(DIST)" -czf "$(TARBALL)" "$(PROJECT)-$(VERSION)"
 	if command -v sha256sum >/dev/null 2>&1; then sha256sum "$(TARBALL)" | awk '{print $$1}' > "$(TARBALL).sha256"; else shasum -a 256 "$(TARBALL)" | awk '{print $$1}' > "$(TARBALL).sha256"; fi
-	cp bin/install.sh "$(DIST)/install.sh"
+	{ cat bin/release-transaction.sh; printf 'MUSTER_STANDALONE=1\n'; awk 'NR > 1 && $$0 != "# shellcheck disable=SC1091" && $$0 != ". \"$$SCRIPT_DIR/release-transaction.sh\"" { print }' bin/install.sh; } > "$(DIST)/install.sh"
 	chmod 0755 "$(DIST)/install.sh"
 	printf '{\n' > "$(DIST)/manifest.json"
 	printf '  "project": "%s",\n' "$(PROJECT)" >> "$(DIST)/manifest.json"

@@ -21,6 +21,63 @@ Muster coordinates with the [Muster Pattern Library](https://github.com/azide0x3
 13. `README.md` includes a self-certification table with evidence.
 14. `muster.yaml`, `MUSTER.md`, or `README.md` identifies relevant MPL atoms and composed patterns when they exist.
 15. Codex may not mark work complete unless tests, release packaging, unit verification where available, and certification docs are current.
+16. The first implementation installed on a host bootstraps the independently versioned Muster core under `/opt/muster/releases/<version>/`.
+17. `/opt/muster/current` selects the active core and `/usr/local/bin/muster` is a managed relative symlink to that executable.
+18. Each implementation owns exactly one registration under `/etc/muster/implementations.d/`; it never owns or removes the shared core.
+19. `muster.yaml` schema 2 declares the implementation component graph and `muster.lock.json` freezes its deterministic release projection.
+20. Every implementation and component has a globally addressable ID. Presentation layers consume the normalized graph rather than application-specific parsers.
+21. Component health is recursive and uses `healthy`, `degraded`, `unhealthy`, and `unknown`; status must never be communicated through color alone.
+22. Doctor is structured evidence using `muster.observation/v1`, not a privileged special case in the UI.
+23. Initial inspection and refresh are read-only, execute no implementation commands, source no environment files, and perform no network requests.
+24. Actions are explicit argument arrays. The initial core may execute only an advertised `doctor.run` action and never evaluates manifest shell fragments.
+25. A declared installed lock is mandatory and its manifest digest must verify; installed inspection must not silently reinterpret an unlocked manifest.
+26. Action IDs and observation IDs share the global object namespace with components. Declared and recursively effective health remain separately inspectable.
+27. Doctor actions that write root-owned evidence declare and enforce `requires_root`; failed or stale evidence must never be presented as a current healthy run.
+28. Release versions, archives, locks, and project identity are validated before immutable publication; current, registration, and managed unit changes are serialized and rolled back as one transaction.
+
+## Host Inspector Contract
+
+The shared host surface is:
+
+```text
+/opt/muster/releases/<core-version>/bin/muster
+/opt/muster/current -> releases/<core-version>
+/usr/local/bin/muster -> ../../../opt/muster/current/bin/muster
+/etc/muster/implementations.d/<project>.json
+```
+
+An implementation installer must ensure a viable core before registration,
+publish its active release, atomically write its own registry locator, and run
+`muster validate`. A later implementation must return without consulting the
+network when a viable core already exists. It must not downgrade or silently
+replace that core.
+
+An implementation updater must restore both its previous `current` target and
+its previous registration when graph validation or doctor evidence rejects the
+new release. An uninstaller removes only its own registration; even the last
+implementation leaves the shared core installed for explicit operator removal.
+
+## Runtime Object Model
+
+Every implementation projects into one generic graph:
+
+- components expose identity, kind, health, summary, metadata, actions,
+  children, purpose, responsibilities, and failure modes;
+- typed edges are `depends_on`, `implements`, `owns`, `produces`, `consumes`,
+  `observes`, and `configures`;
+- health flows recursively through child and dependency relationships;
+- observations contain a producer, component, time, duration, checks, and
+  artifacts;
+- every object can be addressed by `muster inspect`, exported as JSON, and
+  explained through the same graph used by the TUI.
+
+Pattern trees belong to the installed release. Locks record the exact MPL
+commit and resolved closure; the inspector must not substitute a newer website
+or marketing catalog for historical installed truth.
+
+Doctor observations live at a stable path such as
+`/run/muster/<project>/observations/doctor.json`, are written atomically, and
+separate health from operational phase. Stale evidence becomes `unknown`.
 
 ## MPL Pattern Vocabulary
 

@@ -1,0 +1,513 @@
+{
+  "schema": "muster.lock/v1",
+  "source": {
+    "manifest_sha256": "3669de0fa2b77e59279f91bef632302cdcfa19bf283526b711521a701deb517b",
+    "pattern_repository": "https://github.com/azide0x37/muster-pattern-library/tree/main",
+    "pattern_commit": "ea6d02aaa6860e5102a760473b2ffe9b90d13c75",
+    "pattern_roots": [
+      "T2R1.bluetooth-audio-gateway"
+    ]
+  },
+  "graph": {
+    "schema_version": "muster.runtime/v1",
+    "implementations": [
+      {
+        "id": "implementation:bt-audio-gateway",
+        "version": "0.2.0",
+        "summary": "Keeps a Snapcast audio path attached to a specific Bluetooth speaker.",
+        "metadata": {
+          "project": "bt-audio-gateway"
+        },
+        "components": [
+          "implementation:bt-audio-gateway",
+          "component:bt-audio-gateway:services",
+          "component:bt-audio-gateway:unit:bt-audio-watch.service",
+          "component:bt-audio-gateway:unit:snapclient-bt@.service",
+          "component:bt-audio-gateway:unit:bt-audio-doctor.service",
+          "component:bt-audio-gateway:unit:bt-audio-doctor.timer",
+          "component:bt-audio-gateway:unit:bt-audio-update.service",
+          "component:bt-audio-gateway:unit:bt-audio-update.timer",
+          "component:bt-audio-gateway:doctor",
+          "component:bt-audio-gateway:configuration",
+          "component:bt-audio-gateway:config:environment",
+          "component:bt-audio-gateway:release",
+          "component:bt-audio-gateway:patterns",
+          "pattern:bt-audio-gateway:T2R1.bluetooth-audio-gateway",
+          "pattern:bt-audio-gateway:T2C4.self-healing-reconnector",
+          "pattern:bt-audio-gateway:T2C5.local-sidecar-bridge",
+          "pattern:bt-audio-gateway:R2.device-binding",
+          "pattern:bt-audio-gateway:R4.state-ledger",
+          "pattern:bt-audio-gateway:C1.service-capsule",
+          "pattern:bt-audio-gateway:C2.persistent-tick",
+          "pattern:bt-audio-gateway:C5.failure-ratchet"
+        ]
+      }
+    ],
+    "components": [
+      {
+        "id": "component:bt-audio-gateway:config:environment",
+        "kind": "config.file",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Bluetooth identity, audio user, and Snapserver settings.",
+        "what": "The root-managed environment file consumed by owned units.",
+        "why": "Configuration is preserved outside immutable releases."
+      },
+      {
+        "id": "component:bt-audio-gateway:configuration",
+        "kind": "component.group",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Preserved operator configuration.",
+        "children": [
+          "component:bt-audio-gateway:config:environment"
+        ],
+        "what": "The operator-owned settings that bind this gateway to its speaker and Snapserver.",
+        "why": "Machine-specific identity must survive immutable release replacement."
+      },
+      {
+        "id": "component:bt-audio-gateway:doctor",
+        "kind": "doctor",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Latest structured runtime inspection of the gateway.",
+        "actions": [
+          {
+            "id": "action:bt-audio-gateway:doctor.run",
+            "kind": "doctor.run",
+            "label": "Run doctor",
+            "target": "component:bt-audio-gateway:doctor",
+            "requires_root": true,
+            "requires_confirmation": true
+          }
+        ],
+        "what": "Evidence from configuration, systemd, Bluetooth, audio, and network checks.",
+        "why": "A green service process is not proof that sound can reach the speaker."
+      },
+      {
+        "id": "component:bt-audio-gateway:patterns",
+        "kind": "pattern.tree",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Resolved MPL shape and current coverage claim.",
+        "metadata": {
+          "coverage": "partial",
+          "source_commit": "ea6d02aaa6860e5102a760473b2ffe9b90d13c75"
+        },
+        "children": [
+          "pattern:bt-audio-gateway:T2R1.bluetooth-audio-gateway"
+        ],
+        "what": "The reusable operational vocabulary this implementation claims.",
+        "why": "It explains the intended machine shape without inventing project-only nouns."
+      },
+      {
+        "id": "component:bt-audio-gateway:release",
+        "kind": "release.current",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Atomically selected active gateway release.",
+        "what": "The only moving pointer in the versioned install layout.",
+        "why": "Updates can roll back by restoring one symlink."
+      },
+      {
+        "id": "component:bt-audio-gateway:services",
+        "kind": "component.group",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Services and timers owned by this implementation.",
+        "children": [
+          "component:bt-audio-gateway:unit:bt-audio-watch.service",
+          "component:bt-audio-gateway:unit:snapclient-bt@.service",
+          "component:bt-audio-gateway:unit:bt-audio-doctor.service",
+          "component:bt-audio-gateway:unit:bt-audio-doctor.timer",
+          "component:bt-audio-gateway:unit:bt-audio-update.service",
+          "component:bt-audio-gateway:unit:bt-audio-update.timer"
+        ],
+        "what": "The complete systemd surface installed by the gateway.",
+        "why": "Lifecycle, retry, scheduling, and logging belong to systemd."
+      },
+      {
+        "id": "component:bt-audio-gateway:unit:bt-audio-doctor.service",
+        "kind": "systemd.service",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Runs bounded gateway health checks.",
+        "what": "A oneshot service that records gateway health as structured evidence.",
+        "why": "Periodic checks need a supervised execution boundary and durable logs."
+      },
+      {
+        "id": "component:bt-audio-gateway:unit:bt-audio-doctor.timer",
+        "kind": "systemd.timer",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Schedules periodic health evidence.",
+        "what": "The persistent schedule for recurring gateway health observations.",
+        "why": "Bluetooth and audio health can drift after installation without an operator present."
+      },
+      {
+        "id": "component:bt-audio-gateway:unit:bt-audio-update.service",
+        "kind": "systemd.service",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Performs one rollback-aware release update check.",
+        "what": "A bounded service that evaluates and applies one reviewed gateway release.",
+        "why": "Updates need the same verification and rollback boundary as initial installation."
+      },
+      {
+        "id": "component:bt-audio-gateway:unit:bt-audio-update.timer",
+        "kind": "systemd.timer",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Polls for reviewed releases on a persistent schedule.",
+        "what": "The persistent schedule that starts gateway update checks.",
+        "why": "Release polling should survive reboots without a resident updater process."
+      },
+      {
+        "id": "component:bt-audio-gateway:unit:bt-audio-watch.service",
+        "kind": "systemd.service",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Watches and reconnects the configured Bluetooth audio device.",
+        "what": "The long-running Bluetooth connection watcher.",
+        "why": "It confines unreliable device recovery to one restartable service.",
+        "responsibilities": [
+          "reconnect the configured device",
+          "invoke audio routing after connection"
+        ],
+        "failure_modes": [
+          {
+            "id": "failure-1",
+            "summary": "BlueZ cannot see or trust the configured device"
+          },
+          {
+            "id": "failure-2",
+            "summary": "routing fails after the Bluetooth connection succeeds"
+          }
+        ]
+      },
+      {
+        "id": "component:bt-audio-gateway:unit:snapclient-bt@.service",
+        "kind": "systemd.template",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Per-user Snapcast client bridged into the local audio graph.",
+        "what": "A template instantiated for the configured audio user.",
+        "why": "User audio runtime ownership must remain explicit."
+      },
+      {
+        "id": "implementation:bt-audio-gateway",
+        "kind": "implementation",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Keeps a Snapcast audio path attached to a specific Bluetooth speaker.",
+        "children": [
+          "component:bt-audio-gateway:services",
+          "component:bt-audio-gateway:doctor",
+          "component:bt-audio-gateway:configuration",
+          "component:bt-audio-gateway:release",
+          "component:bt-audio-gateway:patterns"
+        ],
+        "what": "A small Linux audio appliance whose lifecycle and recovery are owned by systemd.",
+        "why": "Bluetooth is an unreliable last hop; the gateway makes that unreliability bounded and inspectable.",
+        "responsibilities": [
+          "reconnect the configured Bluetooth speaker",
+          "route the local audio graph to the selected sink",
+          "keep snapclient and scheduled health checks under systemd"
+        ],
+        "failure_modes": [
+          {
+            "id": "failure-1",
+            "summary": "the configured Bluetooth device is absent or no longer trusted"
+          },
+          {
+            "id": "failure-2",
+            "summary": "the PipeWire or Pulse socket is unavailable for the audio user"
+          },
+          {
+            "id": "failure-3",
+            "summary": "the Snapserver cannot be reached"
+          }
+        ]
+      },
+      {
+        "id": "pattern:bt-audio-gateway:C1.service-capsule",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Service Capsule",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "what": "The systemd service boundary around one gateway responsibility.",
+        "why": "Supervision, logging, restart policy, and ownership belong in a standard capsule."
+      },
+      {
+        "id": "pattern:bt-audio-gateway:C2.persistent-tick",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Persistent Tick",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "what": "The persistent timer mechanism used for doctor and update work.",
+        "why": "Scheduled obligations must resume after downtime without a polling daemon."
+      },
+      {
+        "id": "pattern:bt-audio-gateway:C5.failure-ratchet",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Failure Ratchet",
+        "metadata": {
+          "coverage": "partial"
+        },
+        "what": "The partial pattern for retaining actionable gateway failure evidence.",
+        "why": "Repeated Bluetooth faults should remain visible instead of vanishing after restart."
+      },
+      {
+        "id": "pattern:bt-audio-gateway:R2.device-binding",
+        "kind": "pattern.rare",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Device Binding",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "what": "The binding between this gateway and one configured Bluetooth device identity.",
+        "why": "Recovery must target the intended speaker rather than any nearby audio device."
+      },
+      {
+        "id": "pattern:bt-audio-gateway:R4.state-ledger",
+        "kind": "pattern.rare",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "State Ledger",
+        "metadata": {
+          "coverage": "partial",
+          "limitation": "Structured doctor evidence exists, but complete runtime routing state remains future work."
+        },
+        "what": "The partially implemented record of gateway health and routing state.",
+        "why": "Operators need durable facts about failures even when the watcher later recovers."
+      },
+      {
+        "id": "pattern:bt-audio-gateway:T2C4.self-healing-reconnector",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Self-Healing Reconnector",
+        "metadata": {
+          "coverage": "complete"
+        },
+        "children": [
+          "pattern:bt-audio-gateway:C1.service-capsule",
+          "pattern:bt-audio-gateway:C2.persistent-tick",
+          "pattern:bt-audio-gateway:C5.failure-ratchet"
+        ],
+        "what": "The reusable reconnection pattern implemented by the Bluetooth watcher.",
+        "why": "The speaker can disappear transiently, so recovery must be automatic and bounded."
+      },
+      {
+        "id": "pattern:bt-audio-gateway:T2C5.local-sidecar-bridge",
+        "kind": "pattern.common",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Local Sidecar Bridge",
+        "metadata": {
+          "coverage": "partial"
+        },
+        "children": [
+          "pattern:bt-audio-gateway:C1.service-capsule",
+          "pattern:bt-audio-gateway:C2.persistent-tick",
+          "pattern:bt-audio-gateway:C5.failure-ratchet"
+        ],
+        "what": "The pattern for bridging Snapcast into the host audio graph beside the watcher.",
+        "why": "Network audio transport and local Bluetooth recovery need separate lifecycle owners."
+      },
+      {
+        "id": "pattern:bt-audio-gateway:T2R1.bluetooth-audio-gateway",
+        "kind": "pattern.rare",
+        "health": {
+          "status": "unknown"
+        },
+        "summary": "Bluetooth Audio Gateway",
+        "metadata": {
+          "coverage": "partial",
+          "maturity": "draft",
+          "reason": "Reconnection and device binding exist; the full R4 state ledger remains incomplete."
+        },
+        "children": [
+          "pattern:bt-audio-gateway:T2C4.self-healing-reconnector",
+          "pattern:bt-audio-gateway:T2C5.local-sidecar-bridge",
+          "pattern:bt-audio-gateway:R2.device-binding",
+          "pattern:bt-audio-gateway:R4.state-ledger"
+        ],
+        "what": "The rare pattern describing this Snapcast-to-Bluetooth appliance shape.",
+        "why": "It names the combined device binding, reconnection, sidecar, and state obligations."
+      }
+    ],
+    "edges": [
+      {
+        "from": "component:bt-audio-gateway:doctor",
+        "type": "observes",
+        "to": "component:bt-audio-gateway:services"
+      },
+      {
+        "from": "component:bt-audio-gateway:unit:bt-audio-watch.service",
+        "type": "implements",
+        "to": "pattern:bt-audio-gateway:R2.device-binding"
+      },
+      {
+        "from": "component:bt-audio-gateway:unit:bt-audio-watch.service",
+        "type": "implements",
+        "to": "pattern:bt-audio-gateway:T2C4.self-healing-reconnector"
+      },
+      {
+        "from": "component:bt-audio-gateway:unit:snapclient-bt@.service",
+        "type": "depends_on",
+        "to": "component:bt-audio-gateway:unit:bt-audio-watch.service",
+        "summary": "Audio transport waits for the Bluetooth path."
+      },
+      {
+        "from": "implementation:bt-audio-gateway",
+        "type": "owns",
+        "to": "component:bt-audio-gateway:configuration"
+      },
+      {
+        "from": "implementation:bt-audio-gateway",
+        "type": "owns",
+        "to": "component:bt-audio-gateway:doctor"
+      },
+      {
+        "from": "implementation:bt-audio-gateway",
+        "type": "owns",
+        "to": "component:bt-audio-gateway:patterns"
+      },
+      {
+        "from": "implementation:bt-audio-gateway",
+        "type": "owns",
+        "to": "component:bt-audio-gateway:release"
+      },
+      {
+        "from": "implementation:bt-audio-gateway",
+        "type": "owns",
+        "to": "component:bt-audio-gateway:services"
+      }
+    ]
+  },
+  "adapters": {
+    "component:bt-audio-gateway:config:environment": {
+      "adapter": "metadata.file",
+      "path": "/etc/bt-audio-gateway/bt-audio-gateway.env",
+      "required": true
+    },
+    "component:bt-audio-gateway:configuration": {},
+    "component:bt-audio-gateway:doctor": {
+      "adapter": "observation.file",
+      "state_file": "/run/muster/bt-audio-gateway/observations/doctor.json",
+      "absent_status": "unknown",
+      "max_age_seconds": 1800
+    },
+    "component:bt-audio-gateway:patterns": {},
+    "component:bt-audio-gateway:release": {
+      "adapter": "release.current",
+      "path": "/opt/bt-audio-gateway/current",
+      "required": true
+    },
+    "component:bt-audio-gateway:services": {},
+    "component:bt-audio-gateway:unit:bt-audio-doctor.service": {
+      "adapter": "systemd.unit",
+      "unit": "bt-audio-doctor.service",
+      "role": "oneshot",
+      "allow_inactive": true
+    },
+    "component:bt-audio-gateway:unit:bt-audio-doctor.timer": {
+      "adapter": "systemd.unit",
+      "unit": "bt-audio-doctor.timer",
+      "role": "timer"
+    },
+    "component:bt-audio-gateway:unit:bt-audio-update.service": {
+      "adapter": "systemd.unit",
+      "unit": "bt-audio-update.service",
+      "role": "oneshot",
+      "allow_inactive": true
+    },
+    "component:bt-audio-gateway:unit:bt-audio-update.timer": {
+      "adapter": "systemd.unit",
+      "unit": "bt-audio-update.timer",
+      "role": "timer"
+    },
+    "component:bt-audio-gateway:unit:bt-audio-watch.service": {
+      "adapter": "systemd.unit",
+      "unit": "bt-audio-watch.service",
+      "role": "daemon"
+    },
+    "component:bt-audio-gateway:unit:snapclient-bt@.service": {
+      "adapter": "systemd.unit",
+      "unit": "snapclient-bt@.service",
+      "role": "template",
+      "allow_inactive": true
+    },
+    "pattern:bt-audio-gateway:C1.service-capsule": {
+      "adapter": "pattern"
+    },
+    "pattern:bt-audio-gateway:C2.persistent-tick": {
+      "adapter": "pattern"
+    },
+    "pattern:bt-audio-gateway:C5.failure-ratchet": {
+      "adapter": "pattern"
+    },
+    "pattern:bt-audio-gateway:R2.device-binding": {
+      "adapter": "pattern"
+    },
+    "pattern:bt-audio-gateway:R4.state-ledger": {
+      "adapter": "pattern",
+      "status": "degraded"
+    },
+    "pattern:bt-audio-gateway:T2C4.self-healing-reconnector": {
+      "adapter": "pattern"
+    },
+    "pattern:bt-audio-gateway:T2C5.local-sidecar-bridge": {
+      "adapter": "pattern"
+    },
+    "pattern:bt-audio-gateway:T2R1.bluetooth-audio-gateway": {
+      "adapter": "pattern",
+      "status": "degraded"
+    }
+  },
+  "actions": {
+    "action:bt-audio-gateway:doctor.run": {
+      "component_id": "component:bt-audio-gateway:doctor",
+      "spec": {
+        "id": "action:bt-audio-gateway:doctor.run",
+        "label": "Run doctor",
+        "kind": "doctor.run",
+        "command": [
+          "/opt/bt-audio-gateway/current/bin/doctor.sh",
+          "--runtime"
+        ],
+        "requires_root": true
+      }
+    }
+  }
+}

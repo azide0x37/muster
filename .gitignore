@@ -1,5 +1,7 @@
 video/node_modules/
 video/out/
 video/public/vo.wav
+.cache/
+/dist/
 .claude/settings.local.json
 .DS_Store

@@ -20,11 +20,15 @@ Create or update:
 - `RELEASE.md`
 - `SECURITY.md`
 - `muster.yaml`
+- `muster.lock.json` generated deterministically from `muster.yaml`
 - `Makefile`
 - `bin/install.sh`
 - `bin/uninstall.sh`
 - `bin/update.sh`
 - `bin/doctor.sh`
+- `bin/muster-bootstrap.sh`
+- `bin/muster-observation.sh`
+- `bin/release-transaction.sh`
 - `bin/render-units.sh`
 - `systemd/*.service`
 - `systemd/*.timer`
@@ -45,6 +49,9 @@ Create or update:
 9. Add update polling through a systemd timer.
 10. Make the installer idempotent.
 11. Make the updater verify SHA256 and roll back if `doctor.sh` fails.
+12. Describe every owned unit, config surface, release pointer, runtime fact, doctor, and MPL claim as globally addressable components in schema 2.
+13. Emit structured doctor evidence at `/run/muster/<project>/observations/doctor.json`.
+14. Give every component non-empty, implementation-specific `what` and `why` text.
 
 ## Installer Requirements
 
@@ -56,11 +63,19 @@ Create or update:
 - create `/etc/<project>/`
 - preserve existing config
 - install into `/opt/<project>/releases/<version>/`
+- validate version strings, archive members, embedded version, lock, and project
+  identity before publishing an immutable release directory
+- serialize same-project lifecycle changes and never rewrite a valid existing
+  version in place
 - atomically update `/opt/<project>/current`
 - install systemd units
 - run `systemctl daemon-reload`
 - enable required services and timers
 - support staged idempotence tests without touching the host
+- ensure the shared `/opt/muster` core and managed `/usr/local/bin/muster` link
+- atomically register only this implementation under `/etc/muster/implementations.d/`
+- validate the normalized graph before enabling services
+- refuse to overwrite an unrelated `muster` command
 
 ## Updater Requirements
 
@@ -73,10 +88,13 @@ Create or update:
 - download the artifact
 - verify SHA256
 - unpack into a new release directory
-- switch `/opt/<project>/current`
+- stage and validate the new immutable release before switching
+- switch `/opt/<project>/current`, registration, managed units/rules, and
+  rollback state as one transaction
 - restart affected services
 - run `doctor.sh`
 - roll back and restart services if the health check fails
+- restore the prior implementation registration when validation or health fails
 
 ## Documentation Requirements
 
@@ -93,6 +111,8 @@ Create or update:
 - troubleshooting commands
 - integration notes for adjacent systems
 - Muster self-certification table
+- shared inspector registration and `muster` command behavior
+- object IDs, component graph, doctor evidence, and pattern-tree inspection
 
 ## Completion Bar
 
@@ -105,3 +125,5 @@ Do not declare completion until:
 - README self-certification is current
 - known limitations are listed
 - MPL mapping is current when applicable
+- the committed lock matches `muster compile muster.yaml`
+- first/second install order and shared-core uninstall ownership are tested

@@ -1,7 +1,0 @@
-[Unit]
-Description=Run bt-audio-gateway health checks
-
-[Service]
-Type=oneshot
-EnvironmentFile=/etc/bt-audio-gateway/bt-audio-gateway.env
-ExecStart=/opt/bt-audio-gateway/current/bin/doctor.sh
