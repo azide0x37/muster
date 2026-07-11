@@ -56,7 +56,7 @@ install_packages() {
     apt-get update
     apt-get install -y \
       curl ca-certificates \
-      rsync util-linux eject dvdbackup
+      rsync util-linux eject dvdbackup lsdvd handbrake-cli
   else
     log "apt-get not found; skipping package install"
   fi
