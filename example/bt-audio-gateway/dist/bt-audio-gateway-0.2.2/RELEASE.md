@@ -1,5 +1,12 @@
 # bt-audio-gateway Release Notes
 
+## 0.2.2
+
+- Bound every `bluetoothctl` probe in the watcher and doctor so an unavailable
+  BlueZ daemon cannot hang the service, scheduled doctor, CLI, or TUI action.
+- Report inactive `bluetooth.service` explicitly, wait between watcher retries,
+  reuse one bounded device inspection, and bound Snapserver reachability.
+
 ## 0.2.1
 
 - Derive the PipeWire/Pulse runtime path from the instantiated service user's
