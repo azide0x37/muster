@@ -2,6 +2,13 @@
 
 This file is generated from `RELEASE.md`. Update release notes first, then run `make changelog`.
 
+## 0.2.1
+
+- Derive the PipeWire/Pulse runtime path from the instantiated service user's
+  actual UID. The prior `%U` specifier resolved to the system manager's UID
+  (`0`), so snapclient probed `/run/user/0` even for a valid non-root user.
+- Add a static regression check for the service-user runtime socket path.
+
 ## 0.2.0
 
 - Register the implementation with the shared Muster host inspector and

@@ -13,7 +13,7 @@
     "implementations": [
       {
         "id": "implementation:bt-audio-gateway",
-        "version": "0.2.0",
+        "version": "0.2.1",
         "summary": "Keeps a Snapcast audio path attached to a specific Bluetooth speaker.",
         "metadata": {
           "project": "bt-audio-gateway"
