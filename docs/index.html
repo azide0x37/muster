@@ -1,0 +1,1710 @@
+<!doctype html>
+<html lang="en" class="taps">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Muster is a repo scaffold framework for small Linux service appliances. systemd owns lifecycle. Installers are idempotent. Updates roll back. Small tools deserve boring operational discipline.">
+<meta name="color-scheme" content="dark light">
+<meta property="og:title" content="MUSTER — small services, standing inspection">
+<meta property="og:description" content="A repo scaffold framework for small Linux service appliances. Stop tiny tools from becoming server archaeology.">
+<meta property="og:type" content="website">
+<title>MUSTER — small services, standing inspection</title>
+<style>
+/* ============================================================
+   MUSTER — single-file site. No build step. No external requests.
+   Font: Saira Stencil One (OFL), subset + embedded below.
+   Themes: TAPS (dark, default) / REVEILLE (light).
+   ============================================================ */
+
+@font-face {
+  font-family: "Muster Stencil";
+  src: url(data:font/woff2;base64,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) format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+/* ---------- tokens ---------- */
+:root, html.taps {
+  --bg: oklch(0.145 0.01 255);
+  --bg-2: oklch(0.175 0.012 255);
+  --bg-3: oklch(0.21 0.014 255);
+  --fg: oklch(0.94 0.005 95);
+  --muted: oklch(0.67 0.012 255);
+  --faint: oklch(0.45 0.012 255);
+  --line: oklch(0.28 0.014 255);
+  --line-soft: oklch(0.23 0.012 255);
+
+  --accent: oklch(0.76 0.155 65);          /* safety orange — the check */
+  --accent-down: oklch(0.68 0.155 60);
+  --accent-soft: oklch(0.76 0.155 65 / 0.13);
+  --steel: oklch(0.78 0.012 255);          /* the chevron */
+  --steel-dim: oklch(0.6 0.012 255);
+
+  --good: oklch(0.75 0.16 150);            /* active (running) */
+  --good-soft: oklch(0.75 0.16 150 / 0.12);
+  --bad: oklch(0.64 0.2 27);
+  --bad-soft: oklch(0.64 0.2 27 / 0.12);
+  --warn: oklch(0.8 0.13 85);
+
+  --r-common: oklch(0.72 0.012 255);       /* rarity: steel */
+  --r-rare: oklch(0.8 0.125 85);           /* rarity: gold */
+  --r-mythic: oklch(0.66 0.195 35);        /* rarity: ember */
+
+  --grid-line: oklch(0.22 0.012 255);
+  --term-bg: oklch(0.12 0.008 255);
+  --shadow: 0 24px 60px oklch(0 0 0 / 0.45);
+
+  --stencil: "Muster Stencil", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html.reveille {
+  --bg: oklch(0.975 0.004 95);
+  --bg-2: oklch(0.945 0.005 95);
+  --bg-3: oklch(0.91 0.006 95);
+  --fg: oklch(0.18 0.012 255);
+  --muted: oklch(0.45 0.012 255);
+  --faint: oklch(0.62 0.01 255);
+  --line: oklch(0.84 0.008 255);
+  --line-soft: oklch(0.89 0.006 255);
+
+  --accent: oklch(0.66 0.16 58);
+  --accent-down: oklch(0.58 0.16 55);
+  --accent-soft: oklch(0.66 0.16 58 / 0.13);
+  --steel: oklch(0.5 0.012 255);
+  --steel-dim: oklch(0.62 0.01 255);
+
+  --good: oklch(0.56 0.15 150);
+  --good-soft: oklch(0.56 0.15 150 / 0.11);
+  --bad: oklch(0.55 0.2 27);
+  --bad-soft: oklch(0.55 0.2 27 / 0.1);
+  --warn: oklch(0.62 0.13 80);
+
+  --r-common: oklch(0.5 0.012 255);
+  --r-rare: oklch(0.62 0.125 82);
+  --r-mythic: oklch(0.58 0.2 33);
+
+  --grid-line: oklch(0.9 0.006 255);
+  --term-bg: oklch(0.99 0.002 95);
+  --shadow: 0 24px 60px oklch(0.3 0.02 255 / 0.14);
+}
+
+/* ---------- base ---------- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+html, body { max-width: 100vw; overflow-x: hidden; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color .35s ease, color .35s ease;
+}
+::selection { background: var(--accent); color: var(--bg); }
+a { color: inherit; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+/* engineering-paper grid, fixed behind everything */
+.grid-bg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  opacity: .5;
+  mask-image: linear-gradient(to bottom, transparent 0, black 120px, black calc(100% - 120px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 120px, black calc(100% - 120px), transparent 100%);
+}
+html.reveille .grid-bg { opacity: .3; }
+
+/* film grain */
+.noise {
+  position: fixed; inset: 0; z-index: 90; pointer-events: none; opacity: .018;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* side rulers */
+.ruler {
+  position: fixed; top: 0; bottom: 0; width: 14px; z-index: 40; pointer-events: none; opacity: .55;
+  background-image: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 24px);
+}
+.ruler.left { left: 0; border-right: 1px solid var(--line-soft); }
+.ruler.right { right: 0; border-left: 1px solid var(--line-soft); }
+
+/* ---------- type helpers ---------- */
+.stencil { font-family: var(--stencil); font-weight: 400; letter-spacing: .02em; text-transform: uppercase; }
+.mono { font-family: var(--mono); }
+.kicker {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .28em; text-transform: uppercase;
+  color: var(--accent); display: flex; align-items: center; gap: 12px;
+}
+.kicker::after { content: ""; height: 1px; flex: 1; background: linear-gradient(to right, var(--accent), transparent); opacity: .5; }
+.kicker .idx { color: var(--muted); }
+.section-title { font-family: var(--stencil); font-size: clamp(38px, 6.5vw, 72px); line-height: .95; text-transform: uppercase; margin: 14px 0 10px; }
+.section-sub { color: var(--muted); max-width: 62ch; font-size: 17px; }
+.section-sub strong, .prose strong { color: var(--fg); font-weight: 600; }
+.prose { max-width: 66ch; color: var(--muted); }
+.prose p + p { margin-top: 14px; }
+.prose em { color: var(--fg); font-style: italic; }
+.prose code, .section-sub code { font-family: var(--mono); font-size: .88em; background: var(--bg-3); border: 1px solid var(--line-soft); padding: 1px 5px; color: var(--fg); }
+
+/* ---------- layout ---------- */
+main { position: relative; z-index: 1; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 40px; }
+section.block { padding: 110px 0 30px; }
+section.block .rule-top { border-top: 1px solid var(--line); padding-top: 26px; }
+
+/* reveal on scroll */
+.reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
+.reveal.on { opacity: 1; transform: none; }
+html.no-motion .reveal { opacity: 1; transform: none; transition: none; }
+
+/* ---------- chrome: top bar ---------- */
+.chrome-top {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  display: flex; align-items: center; gap: 20px;
+  padding: 0 22px; height: 52px;
+  background: color-mix(in oklab, var(--bg) 82%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line-soft);
+}
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand svg { display: block; }
+.brand .name { font-family: var(--stencil); font-size: 20px; letter-spacing: .08em; }
+.chrome-top nav { display: flex; gap: 18px; margin-left: 12px; overflow-x: auto; scrollbar-width: none; }
+.chrome-top nav::-webkit-scrollbar { display: none; }
+.chrome-top nav a {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--muted); text-decoration: none; white-space: nowrap; padding: 4px 0;
+}
+.chrome-top nav a:hover { color: var(--accent); }
+.chrome-top .spacer { flex: 1; }
+.chrome-top .gh {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--fg); text-decoration: none; border: 1px solid var(--line); padding: 6px 12px;
+  transition: border-color .2s ease, color .2s ease, background .2s ease;
+  white-space: nowrap;
+}
+.chrome-top .gh:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.theme-btn {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted);
+  white-space: nowrap;
+}
+.theme-btn:hover { color: var(--accent); }
+.theme-btn .dot { width: 8px; height: 8px; border: 1px solid currentColor; display: inline-block; }
+html.taps .theme-btn .dot { background: transparent; }
+html.reveille .theme-btn .dot { background: currentColor; }
+
+/* ---------- chrome: bottom status bar ---------- */
+.chrome-bottom {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+  display: flex; align-items: center; gap: 18px;
+  height: 34px; padding: 0 22px;
+  background: color-mix(in oklab, var(--bg) 86%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid var(--line-soft);
+  font-family: var(--mono); font-size: 10px; letter-spacing: .12em; color: var(--muted);
+  text-transform: uppercase;
+}
+.chrome-bottom .unit { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.chrome-bottom .spacer { flex: 1; }
+.chrome-bottom .sect { color: var(--accent); }
+.led { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px var(--good); animation: led 2.4s ease-in-out infinite; }
+@keyframes led { 0%,100% { opacity: 1 } 50% { opacity: .55 } }
+.chrome-bottom .dim { color: var(--faint); }
+
+/* ---------- hero ---------- */
+.hero { position: relative; min-height: 100svh; display: flex; align-items: center; padding: 90px 0 60px; }
+#musterCanvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+.hero .wrap { position: relative; z-index: 2; width: 100%; }
+.hero-kicker {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .34em; text-transform: uppercase; color: var(--accent);
+  display: inline-flex; align-items: center; gap: 10px; border: 1px solid var(--line); padding: 7px 14px;
+  background: color-mix(in oklab, var(--bg) 72%, transparent);
+}
+.hero-kicker .led { animation-duration: 1.8s; }
+.hero h1 {
+  font-family: var(--stencil);
+  font-size: clamp(72px, 16vw, 218px);
+  line-height: .86; letter-spacing: .01em; text-transform: uppercase;
+  margin: 18px 0 8px; user-select: none;
+}
+.hero h1 .m { color: var(--fg); }
+.hero h1 .check { color: var(--accent); }
+.hero .tag {
+  font-family: var(--mono); font-size: clamp(13px, 1.6vw, 16px); letter-spacing: .04em;
+  color: var(--fg); max-width: 58ch;
+  background: color-mix(in oklab, var(--bg) 62%, transparent);
+  width: fit-content;
+}
+.hero .tag b { color: var(--accent); font-weight: 600; }
+.hero .sub {
+  margin-top: 10px; color: var(--muted); max-width: 56ch; font-size: 15.5px;
+  background: color-mix(in oklab, var(--bg) 62%, transparent); width: fit-content;
+}
+.hero-ctas { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+.btn {
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase;
+  padding: 12px 20px; border: 1px solid var(--line); color: var(--fg); text-decoration: none;
+  transition: all .2s ease; background: color-mix(in oklab, var(--bg) 70%, transparent);
+  display: inline-flex; align-items: center; gap: 9px;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: oklch(0.15 0.01 255); font-weight: 600; }
+.btn.primary:hover { background: var(--accent-down); border-color: var(--accent-down); color: oklch(0.13 0.01 255); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn.danger:hover { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+
+.hero-traits { display: flex; gap: 10px; margin-top: 30px; flex-wrap: wrap; }
+.trait {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--muted); border: 1px solid var(--line-soft); padding: 5px 10px;
+  background: color-mix(in oklab, var(--bg) 70%, transparent);
+}
+.trait b { color: var(--good); font-weight: 400; }
+
+/* hero roll-call terminal */
+.rollcall {
+  position: relative; z-index: 2;
+  margin-top: 44px; border: 1px solid var(--line); background: color-mix(in oklab, var(--term-bg) 88%, transparent);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.75;
+  max-width: 760px; box-shadow: var(--shadow);
+}
+.term-head {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted);
+}
+.term-head .dots { display: flex; gap: 5px; }
+.term-head .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.term-body { padding: 14px 16px 16px; min-height: 172px; }
+.term-body .ln { white-space: pre-wrap; word-break: break-word; }
+.term-body .ok { color: var(--good); }
+.term-body .dim { color: var(--faint); }
+.term-body .acc { color: var(--accent); }
+.term-body .bad { color: var(--bad); }
+.caret { display: inline-block; width: 8px; height: 15px; background: var(--accent); vertical-align: -2px; animation: caret 1.1s steps(1) infinite; }
+@keyframes caret { 50% { opacity: 0 } }
+html.no-motion .caret { animation: none; }
+
+.hero-scroll {
+  position: absolute; bottom: 52px; left: 50%; transform: translateX(-50%); z-index: 2;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .3em; text-transform: uppercase; color: var(--faint);
+  animation: bob 2.6s ease-in-out infinite;
+}
+@keyframes bob { 0%,100% { transform: translate(-50%, 0) } 50% { transform: translate(-50%, 8px) } }
+html.no-motion .hero-scroll { animation: none; }
+</style>
+<style>
+/* ---------- generic panel + terminal ---------- */
+.panel { border: 1px solid var(--line); background: color-mix(in oklab, var(--bg-2) 92%, transparent); }
+.panel-head {
+  display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line-soft);
+  font-family: var(--mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted);
+}
+.panel-head .right { margin-left: auto; color: var(--faint); letter-spacing: .12em; }
+.term { border: 1px solid var(--line); background: var(--term-bg); font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
+.term .term-body { overflow-x: auto; }
+.cmt { color: var(--faint); }
+.term-body, .fstree, .rail-log .term-body, .pat-stage, .ex-pipe, .cert-wrap {
+  scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+}
+.term-body::-webkit-scrollbar, .fstree::-webkit-scrollbar, .pat-stage::-webkit-scrollbar, .ex-pipe::-webkit-scrollbar, .cert-wrap::-webkit-scrollbar { height: 6px; width: 6px; }
+.term-body::-webkit-scrollbar-thumb, .fstree::-webkit-scrollbar-thumb, .pat-stage::-webkit-scrollbar-thumb, .ex-pipe::-webkit-scrollbar-thumb, .cert-wrap::-webkit-scrollbar-thumb { background: var(--line); }
+.term-body::-webkit-scrollbar-track, .fstree::-webkit-scrollbar-track, .pat-stage::-webkit-scrollbar-track, .ex-pipe::-webkit-scrollbar-track, .cert-wrap::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- §01 archaeology ---------- */
+.arch-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 40px; margin-top: 44px; align-items: start; }
+.strata { position: relative; }
+.strata .layer {
+  border: 1px solid var(--line); border-left: 3px solid var(--steel-dim);
+  padding: 12px 16px; margin-top: -1px; background: var(--bg-2);
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+}
+.strata .layer b { color: var(--fg); font-weight: 500; }
+.strata .layer .era { color: var(--faint); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; white-space: nowrap; }
+.strata .layer.deep { border-left-color: var(--bad); }
+.strata .caption { margin-top: 14px; font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: .06em; }
+
+/* ---------- §02 the shape / lifecycle ---------- */
+.shape-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 40px; margin-top: 44px; align-items: start; }
+.fstree { font-family: var(--mono); font-size: 12.5px; line-height: 1.9; padding: 18px 20px; overflow-x: auto; }
+.fstree .d { color: var(--steel); }
+.fstree .note { color: var(--faint); }
+.fstree .hot { color: var(--accent); }
+.fstree .cfg { color: var(--good); }
+.fstree .ln-row { white-space: pre; }
+
+.unit-list { display: grid; gap: 10px; margin-top: 18px; }
+.unit-row {
+  display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); background: var(--bg-2);
+  padding: 10px 14px; font-family: var(--mono); font-size: 12px;
+}
+.unit-row .st { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 7px var(--good); flex: none; }
+.unit-row .st.wait { background: var(--steel-dim); box-shadow: none; }
+.unit-row .nm { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unit-row .what { margin-left: auto; color: var(--faint); font-size: 11px; text-align: right; white-space: nowrap; }
+
+/* update rail simulator */
+.rail { margin-top: 60px; }
+.rail-grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 0; border: 1px solid var(--line); background: var(--bg-2); }
+.rail-stage { position: relative; padding: 28px 28px 104px; border-right: 1px solid var(--line-soft); min-height: 380px; overflow: hidden; }
+.rail-controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 26px; }
+.releases { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; }
+.release {
+  border: 1px solid var(--line); background: var(--bg); padding: 14px 16px; min-width: 126px;
+  font-family: var(--mono); font-size: 12px; position: relative; transition: border-color .3s ease, opacity .3s ease;
+}
+.release .v { font-family: var(--stencil); font-size: 26px; letter-spacing: .04em; }
+.release .meta { color: var(--faint); font-size: 10.5px; margin-top: 4px; letter-spacing: .08em; }
+.release.current { border-color: var(--good); }
+.release.current::after {
+  content: "CURRENT"; position: absolute; top: -9px; right: 10px; background: var(--good); color: var(--bg);
+  font-size: 9px; letter-spacing: .18em; padding: 1px 7px; font-weight: 600;
+}
+.release.staging { border-color: var(--accent); }
+.release.condemned { border-color: var(--bad); }
+.release.condemned::after {
+  content: "RETAINED FOR AUTOPSY"; position: absolute; top: -9px; right: 10px; background: var(--bad); color: var(--bg);
+  font-size: 9px; letter-spacing: .14em; padding: 1px 7px; font-weight: 600;
+}
+.release.ghost { opacity: 0; transform: translateY(8px); }
+.release.landed { opacity: 1; transform: none; transition: opacity .45s ease, transform .45s cubic-bezier(.2,.7,.2,1), border-color .3s ease; }
+
+.symrow { display: flex; align-items: center; gap: 14px; margin: 26px 0 18px; font-family: var(--mono); font-size: 12.5px; flex-wrap: wrap; }
+.symrow .link-name { color: var(--steel); white-space: nowrap; }
+.symrow .arrow { flex: none; color: var(--accent); font-size: 16px; transition: transform .3s; }
+.symrow .target { color: var(--good); transition: color .2s ease; padding: 4px 10px; border: 1px dashed var(--line); white-space: nowrap; }
+.symrow.flipping .target { color: var(--accent); }
+
+.gates { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.gate {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+  border: 1px solid var(--line-soft); color: var(--faint); padding: 5px 10px; display: inline-flex; align-items: center; gap: 7px;
+  transition: all .25s ease;
+}
+.gate i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); flex: none; transition: all .25s ease; }
+.gate.live { color: var(--fg); border-color: var(--accent); }
+.gate.live i { background: var(--accent); box-shadow: 0 0 7px var(--accent); }
+.gate.pass { color: var(--good); border-color: var(--good); }
+.gate.pass i { background: var(--good); box-shadow: none; }
+.gate.fail { color: var(--bad); border-color: var(--bad); }
+.gate.fail i { background: var(--bad); }
+
+.rail-log { background: var(--term-bg); font-family: var(--mono); font-size: 12px; line-height: 1.8; display: flex; flex-direction: column; }
+.rail-log .term-body { flex: 1; padding: 14px 16px; min-height: 300px; max-height: 420px; overflow-y: auto; }
+.rail-log .ln { white-space: pre-wrap; word-break: break-word; }
+
+.stamp {
+  position: absolute; right: 26px; bottom: 22px; z-index: 3;
+  font-family: var(--stencil); font-size: 30px; letter-spacing: .08em; text-transform: uppercase;
+  border: 3px solid var(--good); color: var(--good); padding: 6px 18px 4px;
+  transform: rotate(-8deg) scale(1.6); opacity: 0; pointer-events: none;
+  mix-blend-mode: normal;
+}
+.stamp.bad { border-color: var(--bad); color: var(--bad); }
+.stamp.show { opacity: .92; transform: rotate(-8deg) scale(1); transition: transform .28s cubic-bezier(.2,1.4,.3,1), opacity .18s ease; }
+html.no-motion .stamp.show { transition: none; }
+
+/* ---------- §03 pattern library ---------- */
+.pat-top { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: 40px; margin-top: 44px; align-items: start; }
+.pat-picker { display: grid; gap: 8px; }
+.pat-pick {
+  text-align: left; border: 1px solid var(--line); background: var(--bg-2); padding: 12px 14px;
+  font-family: var(--mono); transition: border-color .2s ease, background .2s ease; position: relative;
+}
+.pat-pick .pid { font-size: 10px; letter-spacing: .16em; color: var(--faint); text-transform: uppercase; }
+.pat-pick .pnm { font-size: 13.5px; color: var(--fg); margin-top: 2px; }
+.pat-pick:hover { border-color: var(--steel-dim); }
+.pat-pick.sel { border-color: var(--accent); background: var(--accent-soft); }
+.pat-pick.sel::before { content: "▸"; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--accent); }
+.pat-picker .lbl { font-family: var(--mono); font-size: 10px; letter-spacing: .24em; text-transform: uppercase; color: var(--faint); margin: 10px 0 2px; }
+
+.pat-stage { border: 1px solid var(--line); background: var(--bg-2); position: relative; overflow-x: auto; }
+#patSvg { display: block; width: 100%; height: auto; min-width: 640px; }
+.pat-legend { display: flex; gap: 16px; padding: 10px 14px; border-top: 1px solid var(--line-soft); font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); flex-wrap: wrap; }
+.pat-legend .key { display: inline-flex; align-items: center; gap: 7px; }
+.pat-legend .sw { width: 10px; height: 10px; border: 1px solid var(--line); }
+
+.pat-detail { border: 1px solid var(--line); border-top: none; background: var(--bg); padding: 18px 22px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 28px; }
+.pat-detail .pd-id { font-family: var(--mono); font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); }
+.pat-detail .pd-name { font-family: var(--stencil); font-size: 30px; line-height: 1.05; }
+.pat-detail .pd-sum { color: var(--muted); font-size: 14.5px; max-width: 64ch; margin-top: 4px; }
+.pat-detail .pd-side { text-align: right; font-family: var(--mono); font-size: 10.5px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; display: grid; gap: 6px; align-content: start; }
+.mrl { display: inline-flex; gap: 3px; }
+.mrl i { width: 9px; height: 13px; background: var(--line-soft); }
+.mrl i.f { background: var(--accent); }
+.rarity-chip { display: inline-block; padding: 2px 8px; font-size: 9.5px; letter-spacing: .2em; border: 1px solid currentColor; }
+
+.tiles { margin-top: 54px; }
+.tiles-head { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+.tiles-head h3 { font-family: var(--stencil); font-size: 26px; text-transform: uppercase; }
+.tiles-head .count { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: .14em; }
+.tile-filters { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.tfilter {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  border: 1px solid var(--line); color: var(--muted); padding: 5px 10px; transition: all .15s ease;
+}
+.tfilter.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin-top: 18px; }
+.tile {
+  text-align: left; border: 1px solid var(--line); background: var(--bg-2); padding: 12px 14px 12px 17px; position: relative;
+  transition: border-color .2s ease, transform .2s ease, opacity .3s ease; overflow: hidden;
+}
+.tile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--rc); }
+.tile:hover { border-color: var(--rc); transform: translateY(-2px); }
+.tile .tid { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.tile .tnm { font-size: 13.5px; color: var(--fg); font-weight: 500; margin-top: 2px; line-height: 1.3; }
+.tile .tmeta { display: flex; gap: 10px; margin-top: 8px; font-family: var(--mono); font-size: 9.5px; color: var(--faint); letter-spacing: .1em; text-transform: uppercase; }
+.tile .tmeta b { color: var(--rc); font-weight: 400; }
+.tile.hidden { display: none; }
+
+/* ---------- §04 A/B ---------- */
+.scenario-tabs { display: flex; gap: 8px; margin: 44px 0 0; flex-wrap: wrap; }
+.stab {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  border: 1px solid var(--line); color: var(--muted); padding: 10px 16px; transition: all .18s ease;
+}
+.stab:hover { border-color: var(--steel-dim); color: var(--fg); }
+.stab.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.ab-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; align-items: stretch; }
+.ab-panel { border: 1px solid var(--line); background: var(--term-bg); display: flex; flex-direction: column; min-width: 0; }
+.ab-panel .term-body { padding: 16px 18px; font-family: var(--mono); font-size: 12.3px; line-height: 1.75; flex: 1; }
+.ab-panel.a { border-top: 3px solid var(--bad); }
+.ab-panel.b { border-top: 3px solid var(--good); }
+.ab-head-a { color: var(--bad); }
+.ab-head-b { color: var(--good); }
+.ab-verdict { padding: 10px 18px; border-top: 1px solid var(--line-soft); font-family: var(--mono); font-size: 11px; letter-spacing: .1em; }
+.ab-panel.a .ab-verdict { color: var(--bad); }
+.ab-panel.b .ab-verdict { color: var(--good); }
+.ab-fade { animation: abfade .35s ease; }
+@keyframes abfade { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+html.no-motion .ab-fade { animation: none; }
+
+/* ---------- §05 examples ---------- */
+.ex-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 44px; }
+.ex-card { border: 1px solid var(--line); background: var(--bg-2); display: flex; flex-direction: column; }
+.ex-body { padding: 20px 22px 6px; }
+.ex-name { font-family: var(--stencil); font-size: 30px; text-transform: uppercase; line-height: 1; }
+.ex-desc { color: var(--muted); font-size: 14px; margin-top: 8px; max-width: 52ch; }
+.ex-tags { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 14px; }
+.ex-tag { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; border: 1px solid var(--line); color: var(--muted); padding: 3px 8px; }
+.ex-tag.gold { color: var(--r-rare); border-color: color-mix(in oklab, var(--r-rare) 55%, var(--line)); }
+.ex-pipe { padding: 10px 10px 6px; overflow-x: auto; }
+.ex-pipe svg { display: block; width: 100%; height: auto; min-width: 500px; }
+.ex-foot { display: flex; align-items: center; gap: 14px; padding: 12px 22px 18px; margin-top: auto; }
+.ex-foot a { font-family: var(--mono); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); text-decoration: none; }
+.ex-foot a:hover { text-decoration: underline; }
+.ex-foot .ver { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--faint); letter-spacing: .14em; }
+
+/* ---------- §06 contract ---------- */
+.laws { margin-top: 44px; border-top: 1px solid var(--line); }
+.law { display: grid; grid-template-columns: 86px minmax(0,1fr) auto; gap: 20px; align-items: baseline; padding: 20px 4px; border-bottom: 1px solid var(--line); }
+.law .n { font-family: var(--stencil); font-size: 34px; color: var(--faint); line-height: 1; }
+.law .txt { font-size: 16.5px; color: var(--fg); max-width: 72ch; }
+.law .txt .why { display: block; color: var(--muted); font-size: 13.5px; margin-top: 4px; }
+.law .mark { font-family: var(--mono); font-size: 10px; letter-spacing: .2em; color: var(--good); border: 1px solid var(--good); padding: 3px 9px; white-space: nowrap; opacity: 0; transform: rotate(-4deg) scale(1.4); }
+.law.on .mark { opacity: .9; transform: rotate(-4deg) scale(1); transition: transform .25s cubic-bezier(.2,1.4,.3,1) .1s, opacity .15s ease .1s; }
+html.no-motion .law .mark { opacity: .9; transform: rotate(-4deg); transition: none; }
+
+/* ---------- colophon ---------- */
+.colophon { padding: 110px 0 120px; }
+.cert-table { width: 100%; border-collapse: collapse; margin-top: 30px; font-family: var(--mono); font-size: 12.5px; }
+.cert-table th, .cert-table td { text-align: left; padding: 11px 14px; border: 1px solid var(--line); }
+.cert-table th { font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--muted); background: var(--bg-2); font-weight: 500; }
+.cert-table td.ok { color: var(--good); }
+.cert-table td .dim { color: var(--faint); }
+.cert-wrap { overflow-x: auto; }
+.colo-foot { display: flex; align-items: center; gap: 22px; margin-top: 40px; flex-wrap: wrap; }
+.colo-foot .links { display: flex; gap: 18px; flex-wrap: wrap; }
+.colo-foot a { font-family: var(--mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); text-decoration: none; }
+.colo-foot a:hover { color: var(--accent); }
+.colo-foot .fin { margin-left: auto; font-family: var(--stencil); font-size: 20px; letter-spacing: .06em; color: var(--faint); display: flex; align-items: center; gap: 12px; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1000px) {
+  .arch-grid, .shape-grid, .pat-top { grid-template-columns: minmax(0, 1fr); }
+  .rail-grid { grid-template-columns: minmax(0, 1fr); }
+  .rail-stage { border-right: none; border-bottom: 1px solid var(--line-soft); }
+}
+@media (max-width: 820px) {
+  .wrap { padding: 0 22px; }
+  .ab-grid, .ex-grid { grid-template-columns: minmax(0, 1fr); }
+  .chrome-top { gap: 12px; }
+  .chrome-top nav { display: none; }
+  .chrome-bottom .hide-sm { display: none; }
+  .law { grid-template-columns: 54px minmax(0,1fr); }
+  .law .mark { grid-column: 2; justify-self: start; }
+  .law .n { font-size: 26px; }
+  .ruler { display: none; }
+  section.block { padding: 80px 0 20px; }
+  .pat-detail { grid-template-columns: 1fr; }
+  .pat-detail .pd-side { text-align: left; }
+  .hero { padding-top: 76px; }
+  .unit-row { flex-wrap: wrap; }
+  .unit-row .what { margin-left: 20px; width: 100%; text-align: left; white-space: normal; }
+  .stamp { font-size: 22px; right: 12px; bottom: 14px; border-width: 2px; }
+  .rail-stage { padding: 20px 18px 80px; }
+  .rollcall { font-size: 11px; }
+  .btn { padding: 10px 14px; }
+  .release { min-width: 108px; padding: 10px 12px; }
+  .release .v { font-size: 20px; }
+  .release.ghost { display: none; }
+  .release.ghost.landed { display: block; }
+  .panel-head .right { display: none; }
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .led, .hero-scroll, .caret { animation: none !important; }
+  * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="grid-bg" aria-hidden="true"></div>
+<div class="noise" aria-hidden="true"></div>
+<div class="ruler left" aria-hidden="true"></div>
+<div class="ruler right" aria-hidden="true"></div>
+
+<!-- ======================= TOP CHROME ======================= -->
+<header class="chrome-top">
+  <a class="brand" href="#top" aria-label="Muster — back to top">
+    <svg width="26" height="26" viewBox="0 0 100 100" aria-hidden="true">
+      <path fill="var(--steel)" fill-rule="evenodd" d="M8 6 L50 40 L92 6 L92 52 L50 92 L8 52 Z M20 32 L50 57 L80 32 L80 46 L50 78 L20 46 Z"/>
+      <path fill="var(--accent)" d="M34 57 L45 66 L71 36 L76 44 L46 77 L30 65 Z"/>
+    </svg>
+    <span class="name">Muster</span>
+  </a>
+  <nav aria-label="Sections">
+    <a href="#problem" data-scramble>Problem</a>
+    <a href="#shape" data-scramble>The Shape</a>
+    <a href="#patterns" data-scramble>Patterns</a>
+    <a href="#ab" data-scramble>A/B</a>
+    <a href="#examples" data-scramble>Examples</a>
+    <a href="#contract" data-scramble>Contract</a>
+  </nav>
+  <div class="spacer"></div>
+  <button class="theme-btn" id="themeBtn" aria-label="Toggle theme">
+    <span class="dot" aria-hidden="true"></span><span id="themeName">Taps</span>
+  </button>
+  <a class="gh" href="https://github.com/azide0x37/muster" target="_blank" rel="noopener">GitHub ↗</a>
+</header>
+
+<main id="top">
+
+  <!-- ======================= HERO ======================= -->
+  <section class="hero" id="hero" data-title="§00 · Muster">
+    <canvas id="musterCanvas" aria-hidden="true"></canvas>
+    <div class="wrap">
+      <span class="hero-kicker"><span class="led" aria-hidden="true"></span>Repo scaffold framework · Field manual</span>
+      <h1><span class="m">MUST</span><span class="m">E</span><span class="m">R</span></h1>
+      <p class="tag">A repo scaffold framework for <b>small Linux service appliances</b>.</p>
+      <p class="sub">It turns a prose architecture into a boring, installable, updateable,
+        health-checkable service repository — and stops tiny tools from becoming future
+        server archaeology.</p>
+
+      <div class="hero-ctas">
+        <a class="btn primary" href="#shape">See the shape</a>
+        <a class="btn" href="#patterns">Browse the patterns</a>
+        <a class="btn" href="https://github.com/azide0x37/muster" target="_blank" rel="noopener">github.com/azide0x37/muster ↗</a>
+      </div>
+
+      <div class="hero-traits" aria-label="Properties">
+        <span class="trait">systemd-native <b>●</b></span>
+        <span class="trait">idempotent installs <b>●</b></span>
+        <span class="trait">sha256 + rollback updates <b>●</b></span>
+        <span class="trait">doctor.sh health <b>●</b></span>
+        <span class="trait">readme self-certification <b>●</b></span>
+      </div>
+
+      <div class="rollcall" role="img" aria-label="Terminal: systemctl roll call of muster units, all active">
+        <div class="term-head"><span class="dots"><i></i><i></i><i></i></span> pi@shed — roll call
+          <span style="margin-left:auto">journal follows</span></div>
+        <div class="term-body" id="rollcallBody"><noscript><span class="ln dim">JavaScript is off — the roll call stands silent, but every unit is still real. See example/dvd-ingester in the repo.</span></noscript></div>
+      </div>
+    </div>
+    <span class="hero-scroll" aria-hidden="true">▼ scroll to inspect</span>
+  </section>
+
+  <!-- ======================= §01 PROBLEM ======================= -->
+  <section class="block" id="problem" data-title="§01 · Archaeology">
+    <div class="wrap rule-top">
+      <p class="kicker reveal"><span class="idx">§01</span> The problem</p>
+      <h2 class="section-title reveal">Server<br>archaeology</h2>
+      <p class="section-sub reveal">Agentic coding makes it very easy to create useful software
+        faster than we create <strong>discipline</strong> around it. That is the trap.</p>
+
+      <div class="arch-grid">
+        <div class="reveal">
+          <div class="strata" role="img" aria-label="Excavation layers of /usr/local/bin: years of accumulated scripts">
+            <div class="layer"><b>rip.sh</b><span class="era">2019 · author: you, allegedly</span></div>
+            <div class="layer"><b>rip_v2_FINAL.sh</b><span class="era">2020 · calls rip.sh, sometimes</span></div>
+            <div class="layer"><b>fix_bluetooth.sh</b><span class="era">2021 · cron @reboot</span></div>
+            <div class="layer"><b>backup.sh.old</b><span class="era">2022 · does not back up</span></div>
+            <div class="layer"><b>crontab -e</b><span class="era">undated · author unknown</span></div>
+            <div class="layer deep"><b>/usr/local/bin/helper</b><span class="era">load-bearing · do not touch</span></div>
+          </div>
+          <p class="caption mono" style="margin-top:14px;font-size:11px;color:var(--faint)">FIG. 01 — excavation of <span style="color:var(--muted)">/usr/local/bin</span>. Every layer was “just a quick script.”</p>
+        </div>
+        <div class="prose reveal">
+          <p>A shell script becomes a service. A service becomes infrastructure. Infrastructure
+            becomes <em>the thing you forgot was holding up the shed.</em></p>
+          <p>The fun part is the idea — the protocol dance, the DVD drive that rips on insert, the
+            speaker that behaves. The unfun part is the part that matters six months later:
+            install layout, idempotence, logs, service ownership, config preservation, health
+            checks, rollback, update hygiene, documentation that is not just vibes in Markdown.</p>
+          <p>Muster exists to offload that boring work to the agent — but in a constrained way.
+            Not <em>“make me a script.”</em> More like:</p>
+          <div class="term" style="margin-top:18px">
+            <div class="term-body" style="padding:14px 16px">
+              <span class="ln"><span class="cmt"># the whole deal, in one prompt</span></span><br>
+              <span class="ln">Here is the architecture.</span><br>
+              <span class="ln">Produce the operational harness.</span><br>
+              <span class="ln" style="color:var(--accent)">Pass muster.</span>
+            </div>
+          </div>
+          <p style="margin-top:18px">That constraint is the point. Agentic coding should make small tools
+            <strong>more productionizable, not more haunted.</strong></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= §02 THE SHAPE ======================= -->
+  <section class="block" id="shape" data-title="§02 · The Shape">
+    <div class="wrap rule-top">
+      <p class="kicker reveal"><span class="idx">§02</span> The shape · systemd owns lifecycle</p>
+      <h2 class="section-title reveal">One boring,<br>load-bearing shape</h2>
+      <p class="section-sub reveal">Every Muster repo installs into the same skeleton. The exact service
+        changes by project — the operational shape does not. Shown here: <code>example/dvd-ingester</code>,
+        a real appliance from the repo.</p>
+
+      <div class="shape-grid">
+        <div class="reveal">
+          <div class="term fstree" role="img" aria-label="Filesystem layout: config under /etc, versioned releases under /opt, current symlink">
+<div class="ln-row"><span class="cfg">/etc/dvd-ingester/</span>          <span class="note"># config · survives updates</span></div>
+<div class="ln-row">  dvd-ingester.env</div>
+<div class="ln-row"><span class="d">/opt/dvd-ingester/</span></div>
+<div class="ln-row"><span class="d">  releases/</span></div>
+<div class="ln-row">    1.0.2/                  <span class="note"># immutable</span></div>
+<div class="ln-row">    1.0.3/                  <span class="note"># immutable</span></div>
+<div class="ln-row">  <span class="hot">current -&gt; releases/1.0.3</span> <span class="note"># the only moving part</span></div>
+<div class="ln-row"><span class="d">/var/lib/dvd-ingester/</span>      <span class="note"># state · failure markers</span></div>
+          </div>
+          <div class="unit-list" aria-label="systemd units">
+            <div class="unit-row"><span class="st wait"></span><span class="nm">90-dvd-ingester.rules</span><span class="what">udev: matches the drive, asks systemd</span></div>
+            <div class="unit-row"><span class="st"></span><span class="nm">dvd-rip@sr0.service</span><span class="what">one bounded rip job</span></div>
+            <div class="unit-row"><span class="st wait"></span><span class="nm">dvd-publish-one.timer</span><span class="what">atomic publish drain</span></div>
+            <div class="unit-row"><span class="st wait"></span><span class="nm">dvd-ingester-doctor.timer</span><span class="what">health inspection</span></div>
+            <div class="unit-row"><span class="st wait"></span><span class="nm">dvd-ingester-update.timer</span><span class="what">update polling</span></div>
+          </div>
+        </div>
+        <div class="prose reveal">
+          <p><strong>systemd owns lifecycle.</strong> udev is allowed one verb: <em>ask systemd to
+            start a unit.</em> Long work never runs inside a udev rule, a login shell, or a
+            crontab line someone will discover in 2031.</p>
+          <p><strong>Releases are immutable.</strong> Code installs under
+            <code>/opt/&lt;project&gt;/releases/&lt;version&gt;/</code> and units call scripts through
+            <code>current</code>. Updating a service is moving one symlink. Un-updating a
+            service is moving it back.</p>
+          <p><strong>Health is a program, not a feeling.</strong> <code>doctor.sh</code> checks
+            layout, units, capabilities, and the important failure paths. The updater refuses to
+            keep any release the doctor won’t certify.</p>
+          <p>Below is the part that keeps 11&nbsp;p.m. SSH sessions out of your future: the update
+            rail, modeled live. Ship a good release. Then ship a bad one — <em>the bad one is the
+            whole point.</em></p>
+        </div>
+      </div>
+
+      <!-- update rail simulator -->
+      <div class="rail reveal" id="railRoot">
+        <div class="panel-head" style="border:1px solid var(--line);border-bottom:none">
+          <span>The update rail — live model of bin/update.sh</span>
+          <span class="right">fetch → sha256 → stage → flip → doctor → keep|rollback</span>
+        </div>
+        <div class="rail-grid">
+          <div class="rail-stage">
+            <div class="rail-controls">
+              <button class="btn primary" id="shipGood">Ship 1.0.4</button>
+              <button class="btn danger" id="shipBad">Ship a bad 1.0.4</button>
+              <button class="btn" id="railReset">Reset</button>
+            </div>
+            <div class="releases" id="releases">
+              <div class="release" data-v="1.0.2"><div class="v">1.0.2</div><div class="meta">sha256 ok · retained</div></div>
+              <div class="release current" data-v="1.0.3"><div class="v">1.0.3</div><div class="meta">sha256 ok · certified</div></div>
+              <div class="release ghost" data-v="1.0.4" id="rel104"><div class="v">1.0.4</div><div class="meta" id="rel104meta">incoming…</div></div>
+            </div>
+            <div class="symrow" id="symrow">
+              <span class="link-name">/opt/dvd-ingester/current</span>
+              <span class="arrow" aria-hidden="true">→</span>
+              <span class="target" id="symTarget">releases/1.0.3</span>
+            </div>
+            <div class="gates" id="gates">
+              <span class="gate" data-g="fetch"><i></i>fetch</span>
+              <span class="gate" data-g="sha"><i></i>sha256</span>
+              <span class="gate" data-g="stage"><i></i>stage</span>
+              <span class="gate" data-g="flip"><i></i>flip</span>
+              <span class="gate" data-g="restart"><i></i>restart</span>
+              <span class="gate" data-g="doctor"><i></i>doctor</span>
+            </div>
+            <div class="stamp" id="stampGood">Passes muster</div>
+            <div class="stamp bad" id="stampBad">Rolled back</div>
+          </div>
+          <div class="rail-log">
+            <div class="term-head"><span class="dots"><i></i><i></i><i></i></span> journalctl -fu dvd-ingester-update</div>
+            <div class="term-body" id="railLog"><span class="ln dim"># idle. timer armed. press a button, operator.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= §03 PATTERNS ======================= -->
+  <section class="block" id="patterns" data-title="§03 · Pattern Library">
+    <div class="wrap rule-top">
+      <p class="kicker reveal"><span class="idx">§03</span> The pattern library · MPL</p>
+      <h2 class="section-title reveal">A vocabulary of<br>operational shapes</h2>
+      <p class="section-sub reveal">Before a Muster repo invents anything bespoke, it names its shape in the
+        <strong><a href="https://github.com/azide0x37/muster-pattern-library" target="_blank" rel="noopener" style="color:var(--accent)">Muster Pattern Library</a></strong> —
+        35 patterns across three tech tiers. <strong>Tech I</strong> atoms are single-concern systemd
+        shapes. <strong>Tech II</strong> composes them into appliance behaviors. <strong>Tech III</strong>
+        assembles whole machines. Rarity runs common → rare → <em>mythic</em>, which is where the sheaves
+        and holonomy live. MRL is the Muster Readiness Level, 0–9. Select a composed pattern and pull
+        its rigging apart — every node is real, from the manifests.</p>
+
+      <div class="pat-top">
+        <div class="pat-picker reveal" id="patPicker" aria-label="Composed pattern selector"></div>
+        <div class="reveal">
+          <div class="pat-stage">
+            <svg id="patSvg" viewBox="0 0 860 520" role="img" aria-label="Composition graph of the selected pattern"></svg>
+            <div class="pat-legend">
+              <span class="key"><span class="sw" style="background:var(--r-common)"></span>common</span>
+              <span class="key"><span class="sw" style="background:var(--r-rare)"></span>rare</span>
+              <span class="key"><span class="sw" style="background:var(--r-mythic)"></span>mythic</span>
+              <span class="key" style="margin-left:auto">edges = composes · click any node</span>
+            </div>
+          </div>
+          <div class="pat-detail" id="patDetail"></div>
+        </div>
+      </div>
+
+      <div class="tiles reveal">
+        <div class="tiles-head">
+          <h3>Full catalog</h3>
+          <span class="count" id="tileCount"></span>
+          <div class="tile-filters" id="tileFilters">
+            <button class="tfilter on" data-f="all">All</button>
+            <button class="tfilter" data-f="t1">Tech I</button>
+            <button class="tfilter" data-f="t2">Tech II</button>
+            <button class="tfilter" data-f="t3">Tech III</button>
+            <button class="tfilter" data-f="common">Common</button>
+            <button class="tfilter" data-f="rare">Rare</button>
+            <button class="tfilter" data-f="mythic">Mythic</button>
+          </div>
+        </div>
+        <div class="tile-grid" id="tileGrid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= §04 A/B ======================= -->
+  <section class="block" id="ab" data-title="§04 · A/B Inspection">
+    <div class="wrap rule-top">
+      <p class="kicker reveal"><span class="idx">§04</span> A/B inspection · same idea, two futures</p>
+      <h2 class="section-title reveal">Pass muster,<br>or don’t</h2>
+      <p class="section-sub reveal">The same architecture, prompted two ways.
+        <strong>A:</strong> “make me a script.” <strong>B:</strong> “produce the operational harness.”
+        Four perfectly ordinary disasters, inspected.</p>
+
+      <div class="scenario-tabs reveal" id="abTabs" role="tablist"></div>
+      <div class="ab-grid reveal">
+        <div class="ab-panel a">
+          <div class="term-head"><span class="ab-head-a">A · the script</span><span class="right" id="abTitleA"></span></div>
+          <div class="term-body" id="abBodyA"></div>
+          <div class="ab-verdict" id="abVerdictA"></div>
+        </div>
+        <div class="ab-panel b">
+          <div class="term-head"><span class="ab-head-b">B · the muster repo</span><span class="right" id="abTitleB"></span></div>
+          <div class="term-body" id="abBodyB"></div>
+          <div class="ab-verdict" id="abVerdictB"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= §05 EXAMPLES ======================= -->
+  <section class="block" id="examples" data-title="§05 · Deployed Examples">
+    <div class="wrap rule-top">
+      <p class="kicker reveal"><span class="idx">§05</span> The examples · shipped appliances</p>
+      <h2 class="section-title reveal">Two working<br>appliances</h2>
+      <p class="section-sub reveal">Both live in the repo under <code>example/</code> — self-contained
+        Muster projects with installers, updaters, doctors, tests, release artifacts, and
+        README self-certification.</p>
+
+      <div class="ex-grid">
+        <article class="ex-card reveal">
+          <div class="ex-body">
+            <h3 class="ex-name">dvd-ingester</h3>
+            <p class="ex-desc">A disc goes in. A movie comes out of the NAS. udev only pulls the
+              trigger — systemd owns the rip: fingerprint, claimed work dir, atomic publish, eject.
+              Home Assistant watches over MQTT.</p>
+            <div class="ex-tags">
+              <span class="ex-tag gold">T2R4.device-triggered-conveyor</span>
+              <span class="ex-tag">T2R5.signed-update-rail</span>
+              <span class="ex-tag">T2R6.ha-mqtt-bridge</span>
+            </div>
+          </div>
+          <div class="ex-pipe"><svg id="pipeDvd" viewBox="0 0 560 150" role="img" aria-label="Pipeline: disc insert, udev, systemd rip job, work dir, atomic publish, NAS, eject"></svg></div>
+          <div class="ex-foot">
+            <a href="https://github.com/azide0x37/muster/tree/main/example/dvd-ingester" target="_blank" rel="noopener">example/dvd-ingester ↗</a>
+            <span class="ver">v1.0.3 · doctor: 12/12</span>
+          </div>
+        </article>
+
+        <article class="ex-card reveal">
+          <div class="ex-body">
+            <h3 class="ex-name">bt-audio-gateway</h3>
+            <p class="ex-desc">Whole-home audio that ends at a Bluetooth speaker with opinions.
+              Snapcast carries the stream, PipeWire owns the local graph, and systemd reconnects
+              the flaky last hop before anyone notices.</p>
+            <div class="ex-tags">
+              <span class="ex-tag gold">T2R1.bluetooth-audio-gateway</span>
+              <span class="ex-tag">T2C4.self-healing-reconnector</span>
+              <span class="ex-tag">T2C5.local-sidecar-bridge</span>
+            </div>
+          </div>
+          <div class="ex-pipe"><svg id="pipeBt" viewBox="0 0 560 150" role="img" aria-label="Pipeline: Home Assistant, snapserver, snapclient on Pi, PipeWire, Bluetooth speaker"></svg></div>
+          <div class="ex-foot">
+            <a href="https://github.com/azide0x37/muster/tree/main/example/bt-audio-gateway" target="_blank" rel="noopener">example/bt-audio-gateway ↗</a>
+            <span class="ver">snapcast → pipewire → bt</span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= §06 CONTRACT ======================= -->
+  <section class="block" id="contract" data-title="§06 · The Contract">
+    <div class="wrap rule-top">
+      <p class="kicker reveal"><span class="idx">§06</span> The contract · MUSTER.md is the law book</p>
+      <h2 class="section-title reveal">The inspection<br>sheet</h2>
+      <p class="section-sub reveal">Fifteen clauses in the law book; these are the ones that hold the
+        roof up. A repo that can’t stamp every row doesn’t ship.</p>
+
+      <div class="laws">
+        <div class="law reveal"><span class="n">01</span><span class="txt">systemd owns service lifecycle.<span class="why">If it isn’t a unit, it isn’t real. Restart policy is not a suggestion.</span></span><span class="mark">stamped</span></div>
+        <div class="law reveal"><span class="n">02</span><span class="txt">systemd timers own scheduled work.<span class="why">Health checks and update polling are timers — not crontab folklore.</span></span><span class="mark">stamped</span></div>
+        <div class="law reveal"><span class="n">03</span><span class="txt">Config lives under /etc/&lt;project&gt;/.<span class="why">And survives every install, update, and uninstall short of --purge.</span></span><span class="mark">stamped</span></div>
+        <div class="law reveal"><span class="n">04</span><span class="txt">Code lives under /opt/&lt;project&gt;/releases/&lt;version&gt;/.<span class="why">Immutable and versioned. current is a symlink, and it is the only moving part.</span></span><span class="mark">stamped</span></div>
+        <div class="law reveal"><span class="n">05</span><span class="txt">Installers are idempotent.<span class="why">Run twice, converge twice, exit 0. Boredom is the acceptance test.</span></span><span class="mark">stamped</span></div>
+        <div class="law reveal"><span class="n">06</span><span class="txt">Updates verify SHA256, then earn their keep.<span class="why">Stage, flip, doctor. Fail the doctor and the symlink flips right back.</span></span><span class="mark">stamped</span></div>
+        <div class="law reveal"><span class="n">07</span><span class="txt">doctor.sh proves health.<span class="why">A service that cannot demonstrate it is healthy is presumed haunted.</span></span><span class="mark">stamped</span></div>
+        <div class="law reveal"><span class="n">08</span><span class="txt">The README self-certifies.<span class="why">A table of claims with evidence — and agent instructions that make Codex prove the repo is not merely plausible.</span></span><span class="mark">stamped</span></div>
+      </div>
+
+      <div class="hero-ctas reveal" style="margin-top:30px">
+        <a class="btn primary" href="https://github.com/azide0x37/muster/blob/main/MUSTER.md" target="_blank" rel="noopener">Read MUSTER.md — the law book</a>
+        <a class="btn" href="https://github.com/azide0x37/muster#use-muster-in-a-fresh-repo" target="_blank" rel="noopener">Use it in a fresh repo</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= COLOPHON ======================= -->
+  <footer class="colophon" id="colophon" data-title="Colophon">
+    <div class="wrap rule-top">
+      <p class="kicker reveal"><span class="idx">§99</span> Colophon · self-certification</p>
+      <h2 class="section-title reveal" style="font-size:clamp(30px,4.5vw,52px)">This page certifies itself</h2>
+      <p class="section-sub reveal">A Muster README must end with a self-certification table.
+        So does the website. Sauce for the goose.</p>
+
+      <div class="cert-wrap reveal">
+        <table class="cert-table">
+          <thead><tr><th>requirement</th><th>status</th><th>evidence</th></tr></thead>
+          <tbody>
+            <tr><td>single static file</td><td class="ok">PASS</td><td>view source. one document, no build step</td></tr>
+            <tr><td>external requests at runtime</td><td class="ok">0</td><td>check the network tab — <span class="dim">the font is embedded, the instruments are local</span></td></tr>
+            <tr><td>javascript frameworks</td><td class="ok">0</td><td>vanilla. the instruments are hand-wound</td></tr>
+            <tr><td>typeface</td><td class="ok">EMBEDDED</td><td>Saira Stencil One, subset, OFL · ~11 KB</td></tr>
+            <tr><td>themes</td><td class="ok">2</td><td>TAPS (lights out) · REVEILLE (fall in at dawn)</td></tr>
+            <tr><td>prefers-reduced-motion</td><td class="ok">HONORED</td><td>the instruments park themselves</td></tr>
+            <tr><td>passes muster</td><td class="ok">PASS</td><td>stamped, below and throughout</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="colo-foot reveal">
+        <div class="links">
+          <a href="https://github.com/azide0x37/muster" target="_blank" rel="noopener">muster ↗</a>
+          <a href="https://github.com/azide0x37/muster-pattern-library" target="_blank" rel="noopener">pattern library ↗</a>
+          <a href="https://github.com/azide0x37/muster/blob/main/MUSTER.md" target="_blank" rel="noopener">MUSTER.md ↗</a>
+          <a href="https://github.com/azide0x37/muster/tree/main/example" target="_blank" rel="noopener">examples ↗</a>
+        </div>
+        <span class="fin">
+          <svg width="22" height="22" viewBox="0 0 100 100" aria-hidden="true">
+            <path fill="var(--steel)" fill-rule="evenodd" d="M8 6 L50 40 L92 6 L92 52 L50 92 L8 52 Z M20 32 L50 57 L80 32 L80 46 L50 78 L20 46 Z"/>
+            <path fill="var(--accent)" d="M34 57 L45 66 L71 36 L76 44 L46 77 L30 65 Z"/>
+          </svg>
+          small tools · standing inspection
+        </span>
+      </div>
+    </div>
+  </footer>
+</main>
+
+<!-- ======================= BOTTOM CHROME ======================= -->
+<div class="chrome-bottom" aria-hidden="true">
+  <span class="unit"><span class="led"></span><span>muster-page.service</span><span class="dim hide-sm">active (running)</span></span>
+  <span class="unit hide-sm dim">up <span id="uptime" style="margin-left:6px">00:00:00</span></span>
+  <span class="spacer"></span>
+  <span class="unit sect" id="sectNow">§00 · Muster</span>
+  <span class="unit dim hide-sm">1 file · 0 deps · 0 requests</span>
+</div>
+<script>
+(function () {
+  "use strict";
+
+  /* ================= motion + theme ================= */
+  const RM = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const root = document.documentElement;
+  if (RM) root.classList.add("no-motion");
+
+  const themeBtn = document.getElementById("themeBtn");
+  const themeName = document.getElementById("themeName");
+  const themeListeners = [];
+  function applyTheme(mode) {
+    root.classList.toggle("taps", mode === "taps");
+    root.classList.toggle("reveille", mode === "reveille");
+    themeName.textContent = mode === "taps" ? "Taps" : "Reveille";
+    themeListeners.forEach((fn) => fn());
+  }
+  let stored = null;
+  try { stored = localStorage.getItem("muster-theme"); } catch (e) {}
+  const prefersLight = window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches;
+  applyTheme(stored || (prefersLight ? "reveille" : "taps"));
+  themeBtn.addEventListener("click", () => {
+    const next = root.classList.contains("taps") ? "reveille" : "taps";
+    applyTheme(next);
+    try { localStorage.setItem("muster-theme", next); } catch (e) {}
+  });
+
+  const OKLCH = typeof CSS !== "undefined" && CSS.supports && CSS.supports("color", "oklch(0.5 0.1 65)");
+  function cssVar(name, fallback) {
+    if (!OKLCH) return fallback;
+    const v = getComputedStyle(root).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+
+  /* ================= scramble hover ================= */
+  const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/\\<>#%";
+  document.querySelectorAll("[data-scramble]").forEach((el) => {
+    const text = el.textContent;
+    let raf = 0, running = false;
+    el.addEventListener("mouseenter", () => {
+      if (RM || running) return;
+      running = true;
+      const start = performance.now(), dur = 380;
+      const step = (now) => {
+        const p = Math.min((now - start) / dur, 1);
+        const settled = Math.floor(p * text.length);
+        let out = "";
+        for (let i = 0; i < text.length; i++) {
+          out += text[i] === " " || i < settled ? text[i] : CHARSET[(Math.random() * CHARSET.length) | 0];
+        }
+        el.textContent = out;
+        if (p < 1) raf = requestAnimationFrame(step);
+        else { el.textContent = text; running = false; }
+      };
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(step);
+    });
+  });
+
+  /* ================= reveal on scroll ================= */
+  const io = new IntersectionObserver((ents) => {
+    ents.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("on"); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+
+  /* ================= scrollspy + uptime ================= */
+  const sectNow = document.getElementById("sectNow");
+  const spy = new IntersectionObserver((ents) => {
+    ents.forEach((e) => {
+      if (e.isIntersecting) sectNow.textContent = e.target.getAttribute("data-title");
+    });
+  }, { rootMargin: "-45% 0px -45% 0px" });
+  document.querySelectorAll("[data-title]").forEach((el) => spy.observe(el));
+
+  const t0 = Date.now();
+  const up = document.getElementById("uptime");
+  setInterval(() => {
+    const s = ((Date.now() - t0) / 1000) | 0;
+    const p = (n) => String(n).padStart(2, "0");
+    up.textContent = p((s / 3600) | 0) + ":" + p(((s / 60) | 0) % 60) + ":" + p(s % 60);
+  }, 1000);
+
+  /* ================= roll-call typer ================= */
+  const rollLines = [
+    [["acc", "$ "], ["fg", "systemctl list-units 'dvd-*' --no-pager --plain"]],
+    [["fg", "dvd-rip@sr0.service          "], ["dim", "loaded "], ["ok", "active running "], ["dim", " rip inserted disc → work dir"]],
+    [["fg", "dvd-publish-one.timer        "], ["dim", "loaded "], ["ok", "active "], ["dim", "waiting  drain one staged rip → NAS"]],
+    [["fg", "dvd-ingester-doctor.timer    "], ["dim", "loaded "], ["ok", "active "], ["dim", "waiting  scheduled health inspection"]],
+    [["fg", "dvd-ingester-update.timer    "], ["dim", "loaded "], ["ok", "active "], ["dim", "waiting  poll signed release manifest"]],
+    [["fg", "dvd-ingester-ha-mqtt.timer   "], ["dim", "loaded "], ["ok", "active "], ["dim", "waiting  report state → home assistant"]],
+    [["fg", ""]],
+    [["acc", "5 units listed. all present. all accounted for."]],
+  ];
+  const rollBody = document.getElementById("rollcallBody");
+  function renderRoll(instant) {
+    rollBody.innerHTML = "";
+    const caret = document.createElement("span");
+    caret.className = "caret";
+    let li = 0;
+    const typeLine = () => {
+      if (li >= rollLines.length) { rollBody.appendChild(caret); return; }
+      const div = document.createElement("div");
+      div.className = "ln";
+      rollBody.appendChild(div);
+      rollBody.appendChild(caret);
+      const segs = rollLines[li];
+      if (instant) {
+        segs.forEach(([c, t]) => { const s = document.createElement("span"); s.className = c; s.textContent = t; div.appendChild(s); });
+        li++; typeLine(); return;
+      }
+      let si = 0, ci = 0;
+      let span = null;
+      const tick = () => {
+        if (si >= segs.length) { li++; setTimeout(typeLine, li === 1 ? 220 : 46); return; }
+        if (!span) { span = document.createElement("span"); span.className = segs[si][0]; div.insertBefore(span, null); }
+        const txt = segs[si][1];
+        span.textContent = txt.slice(0, ++ci);
+        if (ci >= txt.length) { si++; ci = 0; span = null; }
+        setTimeout(tick, li === 0 ? 14 : 4);
+      };
+      tick();
+    };
+    typeLine();
+  }
+  const rollIo = new IntersectionObserver((ents) => {
+    if (ents[0].isIntersecting) { renderRoll(RM); rollIo.disconnect(); }
+  }, { threshold: 0.3 });
+  rollIo.observe(rollBody);
+
+  /* ================= hero particles: fall in ================= */
+  const canvas = document.getElementById("musterCanvas");
+  const ctx = canvas.getContext("2d");
+  let parts = [], W = 0, H = 0, DPR = 1, heroVisible = true, raf = 0;
+  let colSteel = "#9aa0ab", colAccent = "#f09a1c";
+  function sampleColors() {
+    colSteel = cssVar("--steel", root.classList.contains("taps") ? "#a8adb8" : "#6b7078");
+    colAccent = cssVar("--accent", "#f09a1c");
+  }
+  themeListeners.push(sampleColors);
+  sampleColors();
+
+  function logoPoints() {
+    // draw chevron band + check on an offscreen canvas, sample opaque pixels
+    const S = 260, oc = document.createElement("canvas");
+    oc.width = S; oc.height = S;
+    const o = oc.getContext("2d");
+    const P = (pts) => { o.beginPath(); pts.forEach((p, i) => (i ? o.lineTo(p[0] * S / 100, p[1] * S / 100) : o.moveTo(p[0] * S / 100, p[1] * S / 100))); o.closePath(); };
+    // band = outer chevron minus inner (evenodd)
+    o.fillStyle = "#888";
+    P([[8, 6], [50, 40], [92, 6], [92, 52], [50, 92], [8, 52]]);
+    P([[20, 32], [50, 57], [80, 32], [80, 46], [50, 78], [20, 46]]);
+    o.fill("evenodd");
+    o.fillStyle = "#f80";
+    P([[34, 57], [45, 66], [71, 36], [76, 44], [46, 77], [30, 65]]);
+    o.fill();
+    const img = o.getImageData(0, 0, S, S).data;
+    const pts = [];
+    const step = 3;
+    for (let y = 0; y < S; y += step) {
+      for (let x = 0; x < S; x += step) {
+        const i = (y * S + x) * 4;
+        if (img[i + 3] > 120) pts.push({ x: x / S, y: y / S, check: img[i] > 200 && img[i + 1] < 160 });
+      }
+    }
+    return pts;
+  }
+  const LOGO = logoPoints();
+
+  function buildParticles() {
+    const hero = document.getElementById("hero");
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = hero.clientWidth; H = hero.clientHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    const narrow = W < 900;
+    const size = narrow ? Math.min(W * 0.92, 430) : Math.min(W, H) * 0.66;
+    const cx = narrow ? W * 0.5 : W * 0.72;
+    const cy = narrow ? Math.min(H * 0.38, 470) : H * 0.46;
+    canvas.dataset.ghost = narrow ? "1" : "";
+    const want = RM ? LOGO.length : Math.min(LOGO.length, narrow ? 700 : 1050);
+    const pool = LOGO.slice();
+    // deterministic-ish shuffle
+    for (let i = pool.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    parts = pool.slice(0, want).map((p, i) => ({
+      hx: cx + (p.x - 0.5) * size,
+      hy: cy + (p.y - 0.5) * size,
+      x: Math.random() * W, y: Math.random() * H,
+      vx: 0, vy: 0,
+      check: p.check,
+      delay: (i / want) * 1500 + Math.random() * 250,
+      tw: Math.random() * Math.PI * 2,
+      twS: 0.4 + Math.random() * 1.4,
+    }));
+  }
+
+  const ptr = { x: -9999, y: -9999 };
+  document.getElementById("hero").addEventListener("pointermove", (e) => {
+    const r = canvas.getBoundingClientRect();
+    ptr.x = e.clientX - r.left; ptr.y = e.clientY - r.top;
+  });
+  document.getElementById("hero").addEventListener("pointerleave", () => { ptr.x = ptr.y = -9999; });
+
+  let born = performance.now();
+  let scatterUntil = 0, lastScatter = performance.now();
+  function frame(now) {
+    raf = 0;
+    if (!heroVisible || document.hidden) return;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const t = (now - born);
+    // periodic scatter drill (skipped under reduced motion)
+    if (!RM && now - lastScatter > 17000) {
+      lastScatter = now; scatterUntil = now + 900;
+      for (const p of parts) { p.vx += (Math.random() - 0.5) * 26; p.vy += (Math.random() - 0.5) * 26; }
+    }
+    const alive = t;
+    const ghost = canvas.dataset.ghost ? 0.45 : 1;
+    const alphaSteel = (root.classList.contains("reveille") ? 0.5 : 0.62) * ghost;
+    const alphaCheck = 0.95 * ghost;
+    for (const p of parts) {
+      if (RM) { p.x = p.hx; p.y = p.hy; }
+      else if (alive > p.delay) {
+        const wob = 2.4;
+        const tx = p.hx + Math.sin(t * 0.00042 * p.twS + p.tw) * wob;
+        const ty = p.hy + Math.cos(t * 0.00037 * p.twS + p.tw) * wob;
+        p.vx += (tx - p.x) * 0.02; p.vy += (ty - p.y) * 0.02;
+        const dx = p.x - ptr.x, dy = p.y - ptr.y, d2 = dx * dx + dy * dy;
+        if (d2 < 12100) { const d = Math.sqrt(d2) || 1, f = (1 - d / 110) * 3.2; p.vx += (dx / d) * f; p.vy += (dy / d) * f; }
+        p.vx *= 0.86; p.vy *= 0.86;
+        p.x += p.vx; p.y += p.vy;
+      } else if (!RM) {
+        p.x += Math.sin(t * 0.0004 + p.tw) * 0.22; p.y += Math.cos(t * 0.00035 + p.tw) * 0.22;
+      }
+      const twk = 0.75 + 0.25 * Math.sin(t * 0.001 * p.twS + p.tw);
+      ctx.globalAlpha = (p.check ? alphaCheck : alphaSteel) * twk;
+      ctx.fillStyle = p.check ? colAccent : colSteel;
+      ctx.fillRect(p.x, p.y, 2.1, 2.1);
+    }
+    ctx.globalAlpha = 1;
+    if (!RM) raf = requestAnimationFrame(frame);
+  }
+  function kick() { if (!raf) { raf = requestAnimationFrame(frame); } }
+  const heroIo = new IntersectionObserver((ents) => { heroVisible = ents[0].isIntersecting; if (heroVisible) kick(); });
+  heroIo.observe(document.getElementById("hero"));
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) kick(); });
+  let rsTimer = 0;
+  window.addEventListener("resize", () => { clearTimeout(rsTimer); rsTimer = setTimeout(() => { buildParticles(); kick(); }, 160); });
+  buildParticles();
+  if (RM) { requestAnimationFrame(frame); themeListeners.push(() => requestAnimationFrame(frame)); }
+  else kick();
+
+  /* ================= update rail ================= */
+  const $ = (id) => document.getElementById(id);
+  const railLog = $("railLog");
+  const rel104 = $("rel104");
+  const symTarget = $("symTarget");
+  const symrow = $("symrow");
+  const gates = {};
+  document.querySelectorAll(".gate").forEach((g) => (gates[g.dataset.g] = g));
+  let runToken = 0;
+
+  function log(html, cls) {
+    const d = document.createElement("div");
+    d.className = "ln" + (cls ? " " + cls : "");
+    d.innerHTML = html;
+    railLog.appendChild(d);
+    railLog.scrollTop = railLog.scrollHeight;
+  }
+  function setGate(name, state) {
+    const g = gates[name];
+    g.className = "gate" + (state ? " " + state : "");
+  }
+  function setCurrent(v) {
+    document.querySelectorAll(".release").forEach((r) => r.classList.toggle("current", r.dataset.v === v));
+    symTarget.textContent = "releases/" + v;
+    symrow.classList.add("flipping");
+    setTimeout(() => symrow.classList.remove("flipping"), 600);
+  }
+  function railReset(silent) {
+    runToken++;
+    ["fetch", "sha", "stage", "flip", "restart", "doctor"].forEach((g) => setGate(g, ""));
+    rel104.className = "release ghost";
+    $("rel104meta").textContent = "incoming…";
+    setCurrent("1.0.3");
+    symrow.classList.remove("flipping");
+    $("stampGood").classList.remove("show");
+    $("stampBad").classList.remove("show");
+    $("shipGood").disabled = $("shipBad").disabled = false;
+    if (!silent) { railLog.innerHTML = ""; log("# rail reset. timer armed. current -> releases/1.0.3", "dim"); }
+  }
+  function runRail(bad) {
+    railReset(true);
+    const token = ++runToken;
+    railLog.innerHTML = "";
+    $("shipGood").disabled = $("shipBad").disabled = true;
+    const speed = RM ? 0.12 : 1;
+    let t = 60;
+    const at = (ms, fn) => setTimeout(() => { if (token === runToken) fn(); }, ms * speed);
+    const seq = (ms, fn) => { t += ms; at(t, fn); };
+
+    seq(0, () => { log('<span class="dim">dvd-ingester-update.timer</span> fired → <span class="acc">update.service</span> begins'); setGate("fetch", "live"); });
+    seq(650, () => { log('fetch: polling release manifest… found <span class="acc">1.0.4</span>'); setGate("fetch", "pass"); setGate("sha", "live"); });
+    seq(700, () => {
+      log(bad ? 'sha256: <span class="ok">9f3c1a…e77b verified</span> <span class="dim">(the artifact is honest; the code is not)</span>'
+              : 'sha256: <span class="ok">9f3c1a…e77b verified</span>');
+      setGate("sha", "pass"); setGate("stage", "live");
+    });
+    seq(750, () => {
+      log('stage: unpacking to <span class="dim">/opt/dvd-ingester/releases/1.0.4</span>');
+      rel104.classList.add("landed", "staging");
+      $("rel104meta").textContent = "sha256 ok · staged";
+      setGate("stage", "pass"); setGate("flip", "live");
+    });
+    seq(900, () => { log('flip: <span class="acc">current -> releases/1.0.4</span>'); setCurrent("1.0.4"); rel104.classList.remove("staging"); setGate("flip", "pass"); setGate("restart", "live"); });
+    seq(800, () => { log('systemctl restart <span class="dim">dvd-rip@.service dvd-publish-one.timer …</span> ok'); setGate("restart", "pass"); setGate("doctor", "live"); });
+    seq(900, () => log('doctor: unit shape <span class="ok">ok</span> · udev rule <span class="ok">ok</span> · capability probe <span class="ok">ok</span>…'));
+    if (!bad) {
+      seq(950, () => { log('doctor: publish path writable <span class="ok">ok</span> · backpressure sim <span class="ok">ok</span> — <span class="ok">12/12 pass</span>'); setGate("doctor", "pass"); });
+      seq(700, () => {
+        log('<span class="ok">update: 1.0.4 certified. previous release retained.</span>');
+        log('<span class="dim">● dvd-rip@.service — active (running), 1.0.4. nobody was paged.</span>');
+        $("rel104meta").textContent = "sha256 ok · certified";
+        $("stampGood").classList.add("show");
+        $("shipGood").disabled = $("shipBad").disabled = false;
+      });
+    } else {
+      seq(950, () => { log('doctor: publish path writable <span class="bad">FAIL</span> — <span class="bad">11/12</span>'); setGate("doctor", "fail"); });
+      seq(750, () => { log('<span class="bad">update: doctor gate refused 1.0.4</span> — initiating rollback'); });
+      seq(650, () => {
+        log('rollback: <span class="acc">current -> releases/1.0.3</span> · units restarted on 1.0.3');
+        setCurrent("1.0.3");
+        rel104.classList.add("condemned");
+        $("rel104meta").textContent = "failed doctor · kept";
+      });
+      seq(800, () => {
+        log('<span class="dim">marker: /var/lib/dvd-ingester/failed/1.0.4.json written</span>');
+        log('<span class="ok">● dvd-rip@.service — active (running), 1.0.3.</span> <span class="dim">the bad release never took the con.</span>');
+        $("stampBad").classList.add("show");
+        $("shipGood").disabled = $("shipBad").disabled = false;
+      });
+    }
+  }
+  $("shipGood").addEventListener("click", () => runRail(false));
+  $("shipBad").addEventListener("click", () => runRail(true));
+  $("railReset").addEventListener("click", () => railReset(false));
+
+  /* ================= pattern library ================= */
+  const PATTERNS = [{"id":"C1.service-capsule","name":"Service Capsule","tech":1,"rarity":"common","mrl":9,"summary":"Run one well-bounded daemon or script as a managed service with explicit environment, user, restart, and logging behavior.","subs":[],"status":"stable"},{"id":"C2.persistent-tick","name":"Persistent Tick","tech":1,"rarity":"common","mrl":9,"summary":"Run recurring jobs with a timer that catches up after downtime and reports failure through a bounded oneshot service.","subs":[],"status":"stable"},{"id":"C3.dropfolder-trigger","name":"Dropfolder Trigger","tech":1,"rarity":"common","mrl":8,"summary":"React to files appearing in a watched folder and hand them to a safe processing service.","subs":[],"status":"stable"},{"id":"C4.lazy-resource-gate","name":"Lazy Resource Gate","tech":1,"rarity":"common","mrl":8,"summary":"Materialize a mount or network resource only when touched so boot does not depend on flaky external infrastructure.","subs":[],"status":"stable"},{"id":"C5.failure-ratchet","name":"Failure Ratchet","tech":1,"rarity":"common","mrl":7,"summary":"Turn service failure into a first-class event that can log, notify, quarantine, retry, or degrade deliberately.","subs":[],"status":"stable"},{"id":"C6.lifecycle-capsule","name":"Lifecycle Capsule","tech":1,"rarity":"common","mrl":8,"summary":"Install, verify, roll back, and cleanly uninstall one reviewed artifact bundle using a staged root, versioned release directory, current pointer, and preserved configuration.","subs":[],"status":"stable"},{"id":"M1.local-truth-sheaf","name":"Local Truth Sheaf","tech":1,"rarity":"mythic","mrl":4,"summary":"Have each unit report local truth and use a reducer to decide whether those facts glue into coherent machine state.","subs":[],"status":"stable"},{"id":"M2.holonomy-detector","name":"Holonomy Detector","tech":1,"rarity":"mythic","mrl":4,"summary":"Run a loop through expected states and detect whether the system actually returns to identity.","subs":[],"status":"stable"},{"id":"M3.simplicial-task-graph","name":"Simplicial Task Graph","tech":1,"rarity":"mythic","mrl":3,"summary":"Model target states as filled dependency shapes where missing faces explain why the desired state cannot exist.","subs":[],"status":"stable"},{"id":"M4.local-topos-runtime","name":"Local Topos Runtime","tech":1,"rarity":"mythic","mrl":2,"summary":"Treat targets as propositions, services as proofs, and observed paths or devices as evidence for valid local state.","subs":[],"status":"stable"},{"id":"M5.temporal-sheaf","name":"Temporal Sheaf","tech":1,"rarity":"mythic","mrl":3,"summary":"Glue persistent timers, snapshots, and boot/session facts so machines remember obligations across downtime.","subs":[],"status":"stable"},{"id":"R1.socket-anteroom","name":"Socket Anteroom","tech":1,"rarity":"rare","mrl":7,"summary":"Expose a local API or control endpoint through socket activation without keeping the backing service hot.","subs":[],"status":"stable"},{"id":"R2.device-binding","name":"Device Binding","tech":1,"rarity":"rare","mrl":6,"summary":"Attach service lifetime to the presence of a USB, serial, Bluetooth, camera, or other local device.","subs":[],"status":"stable"},{"id":"R3.cgroup-governor","name":"Cgroup Governor","tech":1,"rarity":"rare","mrl":6,"summary":"Constrain CPU, memory, IO, and restart behavior so one bad citizen cannot take down a small appliance.","subs":[],"status":"stable"},{"id":"R4.state-ledger","name":"State Ledger","tech":1,"rarity":"rare","mrl":6,"summary":"Make services explain themselves through journald and small runtime JSON facts under `/run/muster`.","subs":[],"status":"stable"},{"id":"R5.capability-mount","name":"Capability Mount","tech":1,"rarity":"rare","mrl":5,"summary":"Treat access to a resource such as NAS, secrets, cameras, or media as a capability with explicit ownership.","subs":[],"status":"stable"},{"id":"T2C1.hot-cold-nas-conveyor","name":"Hot/Cold NAS Conveyor","tech":2,"rarity":"common","mrl":8,"summary":"Keep hot local storage responsive while lazily moving cold output to NAS or other network storage.","subs":["C1.service-capsule","C2.persistent-tick","C4.lazy-resource-gate","C5.failure-ratchet"],"status":"usable"},{"id":"T2C2.dropfolder-spooler","name":"Dropfolder Spooler","tech":2,"rarity":"common","mrl":8,"summary":"Claim, process, and sort inbound files from a watched folder into done, failed, and log locations.","subs":["C1.service-capsule","C3.dropfolder-trigger","C5.failure-ratchet"],"status":"draft"},{"id":"T2C3.scheduled-herald","name":"Scheduled Herald","tech":2,"rarity":"common","mrl":8,"summary":"Periodically collect machine status and publish it as a runtime file, MOTD source, API payload, or notification.","subs":["C1.service-capsule","C2.persistent-tick","C5.failure-ratchet"],"status":"usable"},{"id":"T2C4.self-healing-reconnector","name":"Self-Healing Reconnector","tech":2,"rarity":"common","mrl":7,"summary":"Use a watcher and timer fallback to reconnect flaky resources without rebooting the whole machine.","subs":["C1.service-capsule","C2.persistent-tick","C5.failure-ratchet"],"status":"usable"},{"id":"T2C5.local-sidecar-bridge","name":"Local Sidecar Bridge","tech":2,"rarity":"common","mrl":7,"summary":"Poll or normalize a local subsystem and publish clean state outward through MQTT, HTTP, files, or another bridge.","subs":["C1.service-capsule","C2.persistent-tick","C5.failure-ratchet"],"status":"usable"},{"id":"T2R1.bluetooth-audio-gateway","name":"Bluetooth Audio Gateway","tech":2,"rarity":"rare","mrl":6,"summary":"Monitor a specific Bluetooth speaker, reconnect it, route audio, and expose honest state to a local control plane.","subs":["T2C4.self-healing-reconnector","T2C5.local-sidecar-bridge","R2.device-binding","R4.state-ledger"],"status":"draft"},{"id":"T2R2.lazy-capability-media-bus","name":"Lazy Capability Media Bus","tech":2,"rarity":"rare","mrl":5,"summary":"Expose media or storage through a lazy resource, cgroup limits, and an API anteroom that materializes capabilities on demand.","subs":["T2C1.hot-cold-nas-conveyor","R1.socket-anteroom","R3.cgroup-governor","R5.capability-mount"],"status":"draft"},{"id":"T2R3.edge-control-plane","name":"Edge Control Plane","tech":2,"rarity":"rare","mrl":5,"summary":"Combine watched jobs, device binding, socket activation, status ledgers, and outward state publishing for a Pi-local machine plane.","subs":["T2C2.dropfolder-spooler","T2C3.scheduled-herald","T2C5.local-sidecar-bridge","R1.socket-anteroom","R2.device-binding","R4.state-ledger"],"status":"draft"},{"id":"T2R4.device-triggered-conveyor","name":"Device-Triggered Conveyor","tech":2,"rarity":"rare","mrl":5,"summary":"Bind a physical device event to a bounded ingest job that waits for hot-storage capacity, proves cold-storage capability, stages local work, and hands output to a hot/cold conveyor.","subs":["C1.service-capsule","C2.persistent-tick","C4.lazy-resource-gate","C5.failure-ratchet","C6.lifecycle-capsule","R2.device-binding","R5.capability-mount","T2C1.hot-cold-nas-conveyor","T2C3.scheduled-herald"],"status":"stable"},{"id":"T2R5.signed-update-rail","name":"Signed Update Rail","tech":2,"rarity":"rare","mrl":5,"summary":"Poll a release manifest, verify artifact hashes, stage a new release, promote the current pointer, and roll back automatically when the doctor gate fails.","subs":["C2.persistent-tick","C5.failure-ratchet","C6.lifecycle-capsule","R4.state-ledger"],"status":"usable"},{"id":"T2R6.home-assistant-mqtt-bridge","name":"Home Assistant MQTT Bridge","tech":2,"rarity":"rare","mrl":5,"summary":"Publish Home Assistant MQTT discovery payloads, bridge appliance state into MQTT topics, and accept bounded control commands through a mockable local inbox before a real broker is enabled.","subs":["C1.service-capsule","C2.persistent-tick","C5.failure-ratchet","C6.lifecycle-capsule","R4.state-ledger","T2C5.local-sidecar-bridge"],"status":"usable"},{"id":"T2R7.ai-analysis-sidecar","name":"AI Analysis Sidecar","tech":2,"rarity":"rare","mrl":5,"summary":"Run opt-in AI analysis against bounded local appliance snapshots through an asynchronous systemd sidecar that writes local summaries and fails back to deterministic state.","subs":["C1.service-capsule","C2.persistent-tick","C5.failure-ratchet","T2C5.local-sidecar-bridge"],"status":"draft"},{"id":"T3C1.edge-appliance-bundle","name":"Edge Appliance Bundle","tech":3,"rarity":"common","mrl":7,"summary":"Turn a Raspberry Pi or similar host into a respectable local appliance with storage, status, recovery, and sidecar behavior.","subs":["T2C1.hot-cold-nas-conveyor","T2C3.scheduled-herald","T2C4.self-healing-reconnector","T2C5.local-sidecar-bridge"],"status":"usable"},{"id":"T3M1.machine-priest","name":"Machine Priest","tech":3,"rarity":"mythic","mrl":3,"summary":"Interpret local operational facts into a canonical truth document that can explain healthy, degraded, unsafe, or unknown state.","subs":["T3C1.edge-appliance-bundle","T3R1.multi-resource-orchestrator","M1.local-truth-sheaf","M5.temporal-sheaf"],"status":"draft"},{"id":"T3M2.ritualized-recovery-loop","name":"Ritualized Recovery Loop","tech":3,"rarity":"mythic","mrl":4,"summary":"Turn recovery into a staged sequence: observe, isolate, reset, rebind, validate, and rejoin.","subs":["C5.failure-ratchet","T2C4.self-healing-reconnector","R4.state-ledger","M2.holonomy-detector","M5.temporal-sheaf"],"status":"draft"},{"id":"T3M3.sheaf-of-services","name":"Sheaf of Services","tech":3,"rarity":"mythic","mrl":2,"summary":"Have services report local facts and let a gluing layer decide whether they form a coherent global machine state.","subs":["M1.local-truth-sheaf","M3.simplicial-task-graph","T2R3.edge-control-plane","T2C3.scheduled-herald"],"status":"draft"},{"id":"T3M4.holonomic-watchdog","name":"Holonomic Watchdog","tech":3,"rarity":"mythic","mrl":3,"summary":"Periodically walk a loop through expected states and detect whether the machine returns to identity.","subs":["M2.holonomy-detector","T2C3.scheduled-herald","T2C4.self-healing-reconnector","R4.state-ledger"],"status":"draft"},{"id":"T3M5.intent-bound-runtime","name":"Intent-Bound Runtime","tech":3,"rarity":"mythic","mrl":2,"summary":"Declare desired operational intent and let a disciplined runtime choose the service graph that satisfies it.","subs":["M4.local-topos-runtime","M5.temporal-sheaf","T2R3.edge-control-plane","R5.capability-mount"],"status":"draft"},{"id":"T3R1.multi-resource-orchestrator","name":"Multi-Resource Orchestrator","tech":3,"rarity":"rare","mrl":5,"summary":"Manage several flaky physical resources as one composed appliance with explicit ownership, degradation, and partial restart policy.","subs":["T3C1.edge-appliance-bundle","T2R1.bluetooth-audio-gateway","T2R2.lazy-capability-media-bus","T2R3.edge-control-plane","R2.device-binding","R4.state-ledger"],"status":"draft"}];
+  const byId = {};
+  PATTERNS.forEach((p) => (byId[p.id] = p));
+  const RC = { common: "var(--r-common)", rare: "var(--r-rare)", mythic: "var(--r-mythic)" };
+  const short = (id) => id.split(".")[0];
+
+  const FEATURED = ["T2R4.device-triggered-conveyor", "T2C1.hot-cold-nas-conveyor", "T2R5.signed-update-rail",
+    "T2R6.home-assistant-mqtt-bridge", "T3C1.edge-appliance-bundle", "T3M2.ritualized-recovery-loop", "T3M4.holonomic-watchdog"];
+  const picker = $("patPicker");
+  const lbl = document.createElement("div");
+  lbl.className = "lbl"; lbl.textContent = "Composed patterns — pull the rigging";
+  picker.appendChild(lbl);
+  FEATURED.forEach((id) => {
+    const p = byId[id];
+    const b = document.createElement("button");
+    b.className = "pat-pick";
+    b.innerHTML = '<div class="pid">' + p.id + "</div><div class='pnm'>" + p.name + "</div>";
+    b.addEventListener("click", () => select(id));
+    b.dataset.id = id;
+    picker.appendChild(b);
+  });
+
+  const svg = $("patSvg");
+  const NS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function descend(id, acc) {
+    (byId[id].subs || []).forEach((s) => { if (byId[s] && !acc.has(s)) { acc.add(s); descend(s, acc); } });
+    return acc;
+  }
+  function parentsOf(id) { return PATTERNS.filter((p) => (p.subs || []).includes(id)).map((p) => p.id); }
+
+  let selected = null;
+  function select(id) {
+    selected = id;
+    document.querySelectorAll(".pat-pick").forEach((b) => b.classList.toggle("sel", b.dataset.id === id));
+    drawGraph(id);
+    drawDetail(id);
+  }
+
+  function drawGraph(id) {
+    svg.innerHTML = "";
+    const nodes = new Set([id]);
+    descend(id, nodes);
+    parentsOf(id).forEach((p) => nodes.add(p));
+    const list = [...nodes].map((n) => byId[n]);
+    const rows = { 3: [], 2: [], 1: [] };
+    list.forEach((p) => rows[p.tech].push(p));
+    Object.values(rows).forEach((r) => r.sort((a, b) => (a.id === id ? -1 : b.id === id ? 1 : a.id.localeCompare(b.id))));
+    const usedRows = [3, 2, 1].filter((t) => rows[t].length);
+    const H_ = 520, W_ = 860, rowY = {};
+    usedRows.forEach((t, i) => (rowY[t] = usedRows.length === 1 ? 260 : 90 + (i * (H_ - 190)) / (usedRows.length - 1)));
+    const pos = {};
+    usedRows.forEach((t) => {
+      const r = rows[t];
+      const bw = Math.max(64, Math.min(150, ((W_ - 80) / r.length) - 16));
+      r.forEach((p, i) => {
+        const x = W_ / 2 + (i - (r.length - 1) / 2) * (bw + 16);
+        pos[p.id] = { x, y: rowY[t], w: bw };
+      });
+    });
+    // edges: selected->descendants chain + parents->selected
+    const edges = [];
+    nodes.forEach((n) => {
+      (byId[n].subs || []).forEach((s) => {
+        if (nodes.has(s)) {
+          if (n === id || nodes.has(n)) edges.push([n, s]);
+        }
+      });
+    });
+    parentsOf(id).forEach((p) => { /* already covered: parent lists id in subs */ });
+    const seen = new Set();
+    edges.forEach(([a, b]) => {
+      const key = a + ">" + b;
+      if (seen.has(key) || !pos[a] || !pos[b]) return;
+      seen.add(key);
+      const A = pos[a], B = pos[b];
+      const hot = a === id || b === id;
+      const sameRow = Math.abs(A.y - B.y) < 1;
+      const d = sameRow
+        ? `M ${A.x} ${A.y - 17} C ${A.x} ${A.y - 64}, ${B.x} ${B.y - 64}, ${B.x} ${B.y - 17}`
+        : `M ${A.x} ${A.y + 17} C ${A.x} ${A.y + 70}, ${B.x} ${B.y - 70}, ${B.x} ${B.y - 17}`;
+      const path = el("path", {
+        d,
+        fill: "none",
+        stroke: hot ? "var(--accent)" : "var(--line)",
+        "stroke-width": hot ? 1.6 : 1,
+        opacity: hot ? 0.9 : 0.55,
+      });
+      if (hot && !RM) {
+        path.setAttribute("stroke-dasharray", "6 5");
+        const anim = el("animate", { attributeName: "stroke-dashoffset", from: "22", to: "0", dur: "1.2s", repeatCount: "indefinite" });
+        path.appendChild(anim);
+      }
+      svg.appendChild(path);
+    });
+    // row labels
+    usedRows.forEach((t) => {
+      svg.appendChild(Object.assign(el("text", { x: 18, y: rowY[t] + 4, fill: "var(--faint)", "font-size": 10, "letter-spacing": 2 }), { textContent: "T" + t }));
+    });
+    // nodes
+    list.forEach((p) => {
+      const P = pos[p.id], isSel = p.id === id;
+      const g = el("g", { cursor: "pointer" });
+      const rect = el("rect", {
+        x: P.x - P.w / 2, y: P.y - 17, width: P.w, height: 34,
+        fill: isSel ? "var(--accent-soft)" : "var(--bg)",
+        stroke: isSel ? "var(--accent)" : RC[p.rarity],
+        "stroke-width": isSel ? 2 : 1.2,
+      });
+      const t1 = el("text", {
+        x: P.x, y: P.y + 4, "text-anchor": "middle",
+        fill: isSel ? "var(--accent)" : "var(--fg)",
+        "font-size": 12.5, "font-family": "ui-monospace, Menlo, monospace", "letter-spacing": 1,
+      });
+      t1.textContent = short(p.id);
+      g.appendChild(rect); g.appendChild(t1);
+      if (rows[p.tech].length <= 6) {
+        const t2 = el("text", { x: P.x, y: P.y + 32, "text-anchor": "middle", fill: "var(--muted)", "font-size": 8.6, "font-family": "ui-monospace, Menlo, monospace", "letter-spacing": 0.6 });
+        t2.textContent = p.name.toLowerCase();
+        g.appendChild(t2);
+      }
+      const title = el("title", {});
+      title.textContent = p.id + " — " + p.name;
+      g.appendChild(title);
+      g.addEventListener("click", () => select(p.id));
+      svg.appendChild(g);
+    });
+  }
+
+  function drawDetail(id) {
+    const p = byId[id];
+    const parents = parentsOf(id);
+    const mrl = Array.from({ length: 9 }, (_, i) => `<i class="${i < p.mrl ? "f" : ""}"></i>`).join("");
+    $("patDetail").innerHTML = `
+      <div>
+        <div class="pd-id">${p.id}</div>
+        <div class="pd-name">${p.name}</div>
+        <div class="pd-sum">${p.summary}</div>
+        ${parents.length ? `<div class="pd-sum" style="margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--faint)">mustered into: ${parents.map((x) => short(x)).join(" · ")}</div>` : ""}
+      </div>
+      <div class="pd-side">
+        <span class="rarity-chip" style="color:${RC[p.rarity]}">${p.rarity}</span>
+        <span>tech ${["", "I", "II", "III"][p.tech]} · ${p.status}</span>
+        <span>mrl <span class="mrl" style="margin-left:6px">${mrl}</span></span>
+        <span style="color:var(--faint)">${(p.subs || []).length ? (p.subs.length + " subpatterns") : "atom"}</span>
+      </div>`;
+  }
+
+  /* tiles */
+  const grid = $("tileGrid");
+  const order = { common: 0, rare: 1, mythic: 2 };
+  const sorted = PATTERNS.slice().sort((a, b) => a.tech - b.tech || order[a.rarity] - order[b.rarity] || a.id.localeCompare(b.id));
+  sorted.forEach((p) => {
+    const b = document.createElement("button");
+    b.className = "tile";
+    b.dataset.tech = "t" + p.tech;
+    b.dataset.rarity = p.rarity;
+    b.style.setProperty("--rc", RC[p.rarity]);
+    b.innerHTML = `<div class="tid">${p.id}</div><div class="tnm">${p.name}</div>
+      <div class="tmeta"><span><b>${p.rarity}</b></span><span>mrl ${p.mrl}</span><span>${p.status}</span></div>`;
+    b.title = p.summary;
+    b.addEventListener("click", () => {
+      select(p.id);
+      document.querySelector(".pat-stage").scrollIntoView({ behavior: RM ? "auto" : "smooth", block: "center" });
+    });
+    grid.appendChild(b);
+  });
+  const count = $("tileCount");
+  function applyFilter(f) {
+    let shown = 0;
+    grid.querySelectorAll(".tile").forEach((t) => {
+      const ok = f === "all" || t.dataset.tech === f || t.dataset.rarity === f;
+      t.classList.toggle("hidden", !ok);
+      if (ok) shown++;
+    });
+    count.textContent = shown + " / " + PATTERNS.length + " patterns · generated from manifests";
+  }
+  document.querySelectorAll(".tfilter").forEach((b) => {
+    b.addEventListener("click", () => {
+      document.querySelectorAll(".tfilter").forEach((x) => x.classList.toggle("on", x === b));
+      applyFilter(b.dataset.f);
+    });
+  });
+  applyFilter("all");
+  select("T2R4.device-triggered-conveyor");
+
+  /* ================= A/B scenarios ================= */
+  const AB = [
+    {
+      tab: "Install runs twice",
+      a: {
+        title: "curl | sudo bash, twice",
+        lines: [
+          ["fg", "$ curl -sL totally-fine.sh | sudo bash"],
+          ["fg", "$ curl -sL totally-fine.sh | sudo bash   <span class='cmt'># again, to be safe</span>"],
+          ["bad", "cp: overwriting /usr/local/bin/rip.sh"],
+          ["bad", "crontab: installing new crontab          <span class='cmt'># again</span>"],
+          ["fg", "$ crontab -l | grep rip | wc -l"],
+          ["bad", "2"],
+        ],
+        verdict: "Two rippers now race for one drive. The loser ejects the winner’s disc.",
+      },
+      b: {
+        title: "bin/install.sh, twice",
+        lines: [
+          ["fg", "$ sudo bin/install.sh"],
+          ["dim", "install: releases/1.0.3 already present"],
+          ["dim", "install: units unchanged · config preserved"],
+          ["ok", "install: nothing to do."],
+          ["fg", "$ echo $?"],
+          ["ok", "0"],
+        ],
+        verdict: "Idempotent means bored the second time. Converge, exit 0.",
+      },
+    },
+    {
+      tab: "Power dies mid-rip",
+      a: {
+        title: "writing straight to the library",
+        lines: [
+          ["dim", "[ripping] track 7/9 ····························"],
+          ["bad", "-- POWER LOSS --"],
+          ["fg", "$ ls /mnt/nas/movies/"],
+          ["bad", "Heat_1995.mkv                <span class='cmt'># 41% of a movie</span>"],
+        ],
+        verdict: "Plex indexes the stump. You find out on movie night.",
+      },
+      b: {
+        title: "claimed work dir, atomic publish",
+        lines: [
+          ["dim", "[work] /var/lib/dvd-ingester/work/sr0.9f3c/ claimed"],
+          ["bad", "-- POWER LOSS --"],
+          ["fg", "$ ls /mnt/nas/movies/        <span class='cmt'># publish is rename(2). nothing half-written</span>"],
+          ["fg", "$ ls /var/lib/dvd-ingester/failed/"],
+          ["ok", "sr0.9f3c.ingest-failed       <span class='cmt'># inspectable. retryable. C5.failure-ratchet</span>"],
+        ],
+        verdict: "The library never sees a partial file. The failure is a fact, not a smell.",
+      },
+    },
+    {
+      tab: "The update breaks",
+      a: {
+        title: "git pull in production, from bed",
+        lines: [
+          ["fg", "$ ssh pi 'cd rip && git pull'   <span class='cmt'># 23:41</span>"],
+          ["fg", "$ systemctl status ripper"],
+          ["bad", "● ripper.service — failed (Result: exit-code)"],
+          ["fg", "$ git log --oneline -1          <span class='cmt'># the only changelog</span>"],
+          ["dim", "a3f9e12 fix"],
+        ],
+        verdict: "The old version is gone. Your terminal history is the rollback plan.",
+      },
+      b: {
+        title: "the update rail does its job",
+        lines: [
+          ["dim", "update: 1.0.4 sha256 verified · staged"],
+          ["bad", "doctor: publish path not writable — 11/12"],
+          ["acc", "update: rolling back — current -> releases/1.0.3"],
+          ["dim", "update: 1.0.4 retained for autopsy"],
+          ["ok", "● dvd-rip@.service — active (running), 1.0.3"],
+        ],
+        verdict: "The bad release never took the con. Nobody SSH’d anywhere.",
+      },
+    },
+    {
+      tab: "Six months later",
+      a: {
+        title: "the dig begins",
+        lines: [
+          ["fg", "$ ssh pi"],
+          ["fg", "$ history | grep -i install     <span class='cmt'># nothing</span>"],
+          ["fg", "$ crontab -l                    <span class='cmt'># 11 lines · 3 authors · 0 comments</span>"],
+          ["fg", "$ ps aux | grep rip             <span class='cmt'># something is running</span>"],
+          ["bad", "# …leave it alone. it might be load-bearing."],
+        ],
+        verdict: "Congratulations: it’s archaeology.",
+      },
+      b: {
+        title: "the repo explains itself",
+        lines: [
+          ["fg", "$ cat README.md                 <span class='cmt'># self-certification, with evidence</span>"],
+          ["fg", "$ cat muster.yaml               <span class='cmt'># patterns: T2R4 · T2R5 · T2R6</span>"],
+          ["fg", "$ systemctl status 'dvd-*'      <span class='cmt'># every unit named and owned</span>"],
+          ["fg", "$ sudo bin/doctor.sh"],
+          ["ok", "doctor: 12/12 checks pass"],
+        ],
+        verdict: "Five minutes of reading and you own it again.",
+      },
+    },
+  ];
+  const abTabs = $("abTabs");
+  AB.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.className = "stab" + (i === 0 ? " on" : "");
+    b.setAttribute("role", "tab");
+    b.textContent = s.tab;
+    b.addEventListener("click", () => {
+      abTabs.querySelectorAll(".stab").forEach((x, j) => x.classList.toggle("on", j === i));
+      renderAB(i);
+    });
+    abTabs.appendChild(b);
+  });
+  function abFill(bodyId, titleId, verdictId, side) {
+    $(titleId).textContent = side.title;
+    const body = $(bodyId);
+    body.innerHTML = side.lines.map(([c, t]) => `<div class="ln ${c}">${t}</div>`).join("");
+    $(verdictId).textContent = "▸ " + side.verdict;
+    body.parentElement.classList.remove("ab-fade");
+    void body.parentElement.offsetWidth;
+    body.parentElement.classList.add("ab-fade");
+  }
+  function renderAB(i) {
+    abFill("abBodyA", "abTitleA", "abVerdictA", AB[i].a);
+    abFill("abBodyB", "abTitleB", "abVerdictB", AB[i].b);
+  }
+  renderAB(0);
+
+  /* ================= example pipelines ================= */
+  function drawPipe(id, nodes, loop) {
+    const s = $(id);
+    s.innerHTML = "";
+    const W_ = 560, midY = 88;
+    const n = nodes.length;
+    const bw = Math.min(88, (W_ - 40) / n - 14), bh = 34;
+    const xs = nodes.map((_, i) => 30 + bw / 2 + i * ((W_ - 60 - bw) / (n - 1)));
+    // connecting line
+    s.appendChild(el("line", { x1: xs[0], y1: midY, x2: xs[n - 1], y2: midY, stroke: "var(--line)", "stroke-width": 1 }));
+    // loop-back arc
+    if (loop) {
+      const [fromI, toI, label] = loop;
+      const a = xs[fromI], b = xs[toI];
+      s.appendChild(el("path", {
+        d: `M ${a} ${midY - bh / 2 - 4} C ${a} ${midY - 62}, ${b} ${midY - 62}, ${b} ${midY - bh / 2 - 4}`,
+        fill: "none", stroke: "var(--faint)", "stroke-width": 1, "stroke-dasharray": "4 4",
+      }));
+      const lt = el("text", { x: (a + b) / 2, y: midY - 52, "text-anchor": "middle", fill: "var(--faint)", "font-size": 8.5, "font-family": "ui-monospace, Menlo, monospace", "letter-spacing": 1 });
+      lt.textContent = label;
+      s.appendChild(lt);
+    }
+    nodes.forEach((node, i) => {
+      const x = xs[i];
+      s.appendChild(el("rect", {
+        x: x - bw / 2, y: midY - bh / 2, width: bw, height: bh,
+        fill: "var(--bg)", stroke: node.hot ? "var(--accent)" : "var(--line)", "stroke-width": node.hot ? 1.5 : 1,
+      }));
+      const t = el("text", { x, y: midY + 3.5, "text-anchor": "middle", fill: node.hot ? "var(--accent)" : "var(--fg)", "font-size": 9.2, "font-family": "ui-monospace, Menlo, monospace", "letter-spacing": 0.8 });
+      t.textContent = node.l;
+      s.appendChild(t);
+      const st = el("text", { x, y: midY + bh / 2 + 14, "text-anchor": "middle", fill: "var(--faint)", "font-size": 8, "font-family": "ui-monospace, Menlo, monospace", "letter-spacing": 0.6 });
+      st.textContent = node.s;
+      s.appendChild(st);
+      if (i < n - 1) {
+        const ax = (xs[i] + xs[i + 1]) / 2 + bw / 2 - (xs[i + 1] - xs[i]) / 2;
+        s.appendChild(el("path", { d: `M ${xs[i + 1] - bw / 2 - 7} ${midY - 3.5} L ${xs[i + 1] - bw / 2 - 1} ${midY} L ${xs[i + 1] - bw / 2 - 7} ${midY + 3.5} Z`, fill: "var(--muted)" }));
+      }
+    });
+    // traveling pulse
+    if (!RM) {
+      const dot = el("circle", { r: 3, cy: midY, cx: xs[0], fill: "var(--accent)" });
+      s.appendChild(dot);
+      let visible = false;
+      const pio = new IntersectionObserver((e) => { visible = e[0].isIntersecting; if (visible) step(performance.now()); });
+      pio.observe(s);
+      let start = performance.now();
+      function step(now) {
+        if (!visible || document.hidden) return;
+        const p = ((now - start) % 3600) / 3600;
+        const x = xs[0] + (xs[n - 1] - xs[0]) * p;
+        dot.setAttribute("cx", x);
+        dot.setAttribute("opacity", 0.35 + 0.65 * Math.sin(p * Math.PI));
+        requestAnimationFrame(step);
+      }
+      document.addEventListener("visibilitychange", () => { if (!document.hidden && visible) step(performance.now()); });
+    }
+  }
+  drawPipe("pipeDvd", [
+    { l: "DISC IN", s: "sr0" }, { l: "UDEV", s: "90-….rules" }, { l: "DVD-RIP@", s: ".service", hot: true },
+    { l: "WORK DIR", s: "hot claim" }, { l: "ATOMIC MV", s: "rename(2)" }, { l: "NAS", s: "cold" },
+  ], [5, 0, "eject · done"]);
+  drawPipe("pipeBt", [
+    { l: "HA · MA", s: "source" }, { l: "SNAPSERVER", s: "stream" }, { l: "SNAPCLIENT", s: "raspberry pi", hot: true },
+    { l: "PIPEWIRE", s: "sink graph" }, { l: "BT SPKR", s: "last hop" },
+  ], [4, 2, "reconnect on flake · T2C4"]);
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "muster-explainer",
+  "private": true,
+  "description": "Motion-graphics explainer for Muster, rendered from code. Style-matched to docs/index.html.",
+  "scripts": {
+    "dev": "remotion studio",
+    "render": "remotion render MusterExplainer out/muster-explainer.mp4",
+    "still": "remotion still"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "typescript": "^5.5.0"
+  }
+}

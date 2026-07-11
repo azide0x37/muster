@@ -138,6 +138,12 @@ The exact service code changes by project. The operational skeleton does not.
 
 Each example is a self-contained `impl muster` project with its own installer, updater, doctor, tests, release artifacts, and README self-certification.
 
+## Website
+
+The project site lives at [`docs/index.html`](docs/index.html): one static file, no build step, zero runtime requests. It explains the concept, walks the systemd lifecycle with a live model of the rollback-aware update rail, diagrams the pattern library from the real MPL manifests, and inspects script-vs-muster A/B scenarios.
+
+Serve it locally with `python3 -m http.server -d docs`, or point GitHub Pages at `main` / `docs/`. The page ends with its own self-certification table, as is the law.
+
 ## Brand Assets
 
 Brand assets live in `assets/brand/`:
