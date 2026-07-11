@@ -163,7 +163,11 @@ Run `muster` in a terminal to open the full-screen inspector. It presents the
 Muster implementations on the current server, recursively derived health,
 systemd components, runtime state, the exact pattern tree claimed by each
 release, structured doctor evidence, and literate answers to “what is this?”
-and “why is it here?”
+and “why is it here?” The interface uses Bubble Tea, Bubbles, and Lip Gloss for
+responsive navigation, live activity and health signals, contextual key hints,
+and an explicit modal before doctor execution. Set `MUSTER_REDUCE_MOTION=1` to
+disable spring scrolling, transitions, and blinking while retaining the same
+information and controls.
 
 The same object graph remains available without a TTY:
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"sort"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ func (a app) render() string {
 	s := newStyles(a.dark, a.noColor)
 	header := a.renderHeader(width, s)
 	footer := a.renderFooter(width, s)
-	bodyHeight := height - lipgloss.Height(header) - lipgloss.Height(footer) - 2
+	bodyHeight := height - lipgloss.Height(header) - lipgloss.Height(footer)
 	if bodyHeight < 3 {
 		bodyHeight = 3
 	}
@@ -41,12 +42,50 @@ func (a app) render() string {
 	}
 
 	content := strings.Join([]string{header, body, footer}, "\n")
-	return s.screen.
+	screen := s.screen.
 		Width(width).
 		Height(height).
 		MaxWidth(width).
 		MaxHeight(height).
 		Render(content)
+	if a.confirmAction != "" && width >= minimumWidth && height >= minimumHeight {
+		dialog := a.renderConfirmDialog(width, s)
+		x := max(0, (width-lipgloss.Width(dialog))/2)
+		y := max(0, (height-lipgloss.Height(dialog))/2)
+		screen = lipgloss.NewCompositor(
+			lipgloss.NewLayer(screen),
+			lipgloss.NewLayer(dialog).X(x).Y(y).Z(1),
+		).Render()
+	}
+	return screen
+}
+
+// renderConfirmDialog is the modal that guards doctor execution. It floats
+// over the graph so the question is unmistakable, while the ribbon repeats
+// the same keys for anyone who tuned the modal out.
+func (a app) renderConfirmDialog(width int, s styles) string {
+	name := a.nameFor(a.confirmTarget)
+	requiresRoot := false
+	for _, action := range a.doctorActions(a.confirmTarget) {
+		if action.ID == a.confirmAction {
+			requiresRoot = action.RequiresRoot
+		}
+	}
+	innerWidth := clamp(runeWidth(name)+6, 22, max(22, width-8))
+	w := newLineWriter(innerWidth, s)
+	w.lines = append(w.lines, s.dialogTitle.Render(truncatePlain("CONFIRM DOCTOR", innerWidth)))
+	w.blank()
+	w.text(name, s.title)
+	w.text("Run doctor for this object now?", s.body)
+	if requiresRoot {
+		w.text("Requires root · rerun Muster with sudo.", s.warn)
+	}
+	w.blank()
+	w.lines = append(w.lines,
+		s.ribbonKey.Render("y/enter")+" "+s.ribbonDesc.Render("run")+
+			s.ribbonSep.Render(" · ")+
+			s.ribbonKey.Render("n/esc")+" "+s.ribbonDesc.Render("cancel"))
+	return s.dialog.Render(strings.Join(w.lines, "\n"))
 }
 
 func (a app) dimensions() (int, int) {
@@ -61,13 +100,20 @@ func (a app) dimensions() (int, int) {
 }
 
 func (a app) renderHeader(width int, s styles) string {
-	strap := s.brand.Render("MUSTER") + " " + s.eyebrow.Render("SERVER INSPECTOR")
+	strap := s.gradient("MUSTER", true) + s.faint.Render(" · server inspector")
 	title := s.title.Render(truncatePlain("Muster implementations on "+a.hostname, width))
-	counts := s.subtitle.Render(truncatePlain(a.implementationCounts(), width))
+	counts := a.renderImplementationCounts(width, s)
 	return strings.Join([]string{strap, title, counts}, "\n")
 }
 
-func (a app) implementationCounts() string {
+// countPart pairs one clause of the implementation summary with the health
+// style it deserves; the words alone still tell the whole story.
+type countPart struct {
+	text  string
+	style lipgloss.Style
+}
+
+func (a app) implementationCountParts(s styles) []countPart {
 	counts := map[model.HealthStatus]int{
 		model.HealthHealthy:   0,
 		model.HealthDegraded:  0,
@@ -82,43 +128,225 @@ func (a app) implementationCounts() string {
 		counts[status]++
 	}
 	count := len(a.graph.Implementations)
-	parts := []string{fmt.Sprintf("%d %s", count, plural(count, "implementation", "implementations"))}
+	parts := []countPart{{
+		text:  fmt.Sprintf("%d %s", count, plural(count, "implementation", "implementations")),
+		style: s.subtitle,
+	}}
 	for _, status := range []model.HealthStatus{
 		model.HealthHealthy, model.HealthDegraded, model.HealthUnhealthy, model.HealthUnknown,
 	} {
 		if counts[status] > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", counts[status], status))
+			parts = append(parts, countPart{
+				text:  fmt.Sprintf("%d %s", counts[status], status),
+				style: healthStyle(status, s),
+			})
 		}
 	}
 	if count == 0 {
-		parts = append(parts, "nothing registered yet")
+		parts = append(parts, countPart{text: "nothing registered yet", style: s.faint})
 	}
-	return strings.Join(parts, " · ")
+	return parts
 }
 
-func (a app) renderFooter(width int, s styles) string {
-	contextLine := "Read-only view · live state and declared intent share one graph"
-	if a.status != "" {
-		contextLine = a.status
+func (a app) implementationCounts() string {
+	parts := a.implementationCountParts(newStyles(a.dark, true))
+	texts := make([]string, len(parts))
+	for index, part := range parts {
+		texts[index] = part.text
 	}
-	if a.busy && a.operation != "" {
-		contextLine = "◌ " + a.operation + " · " + contextLine
-	}
+	return strings.Join(texts, " · ")
+}
 
-	keys := "↑↓/jk select · tab pane · enter inspect · r refresh · ? help · q quit"
+func (a app) renderImplementationCounts(width int, s styles) string {
+	parts := a.implementationCountParts(s)
+	if runeWidth(a.implementationCounts()) > width {
+		return s.subtitle.Render(truncatePlain(a.implementationCounts(), width))
+	}
+	rendered := make([]string, len(parts))
+	for index, part := range parts {
+		rendered[index] = part.style.Render(part.text)
+	}
+	return strings.Join(rendered, s.faint.Render(" · "))
+}
+
+// renderFooter is the bottom chrome: a segmented status bar in the language
+// of the Muster website's fixed frame, and a contextual key ribbon beneath it.
+func (a app) renderFooter(width int, s styles) string {
+	return a.renderStatusBar(width, s) + "\n" + a.renderRibbon(width, s)
+}
+
+// sectionLabel names where the operator is, the way the site's bottom bar
+// tracks the section in view.
+func (a app) sectionLabel() string {
+	switch {
+	case a.confirmAction != "":
+		return "CONFIRM"
+	case a.help:
+		return "HELP"
+	case a.inspect != "":
+		return "INSPECT"
+	default:
+		return "BROWSE"
+	}
+}
+
+// fleetHealth is the single LED verdict for everything registered here.
+func (a app) fleetHealth() model.HealthStatus {
+	if len(a.graph.Implementations) == 0 {
+		return model.HealthUnknown
+	}
+	worst := model.HealthHealthy
+	for _, implementation := range a.graph.Implementations {
+		status := model.HealthUnknown
+		if component, ok := a.graph.Lookup(implementation.ID); ok {
+			status = normalizedStatus(component.Health.Status)
+		}
+		switch status {
+		case model.HealthUnhealthy:
+			return model.HealthUnhealthy
+		case model.HealthDegraded:
+			worst = model.HealthDegraded
+		case model.HealthUnknown:
+			if worst == model.HealthHealthy {
+				worst = model.HealthUnknown
+			}
+		}
+	}
+	return worst
+}
+
+func healthColor(status model.HealthStatus, c palette) color.Color {
+	switch normalizedStatus(status) {
+	case model.HealthHealthy:
+		return c.good
+	case model.HealthDegraded:
+		return c.warn
+	case model.HealthUnhealthy:
+		return c.bad
+	default:
+		return c.muted
+	}
+}
+
+// renderStatusBar lays out the bar's units: LED + host, a flexible message
+// cell, the section cell, and object counters. Narrow terminals shed the
+// outer units first, exactly like the site's bar hides its small cells.
+func (a app) renderStatusBar(width int, s styles) string {
+	host := a.renderHostCell(s)
+	section := a.renderSectionCell(s)
+	counts := a.renderCountsCell(s)
+
+	used := lipgloss.Width(host) + lipgloss.Width(section) + lipgloss.Width(counts)
+	if width < wideBreakpoint || width-used < 14 {
+		counts = ""
+		used = lipgloss.Width(host) + lipgloss.Width(section)
+	}
+	if width < 56 || width-used < 14 {
+		host = ""
+		used = lipgloss.Width(section)
+	}
+	message := a.renderMessageCell(max(1, width-used), s)
+	bar := host + message + section + counts
+	if lipgloss.Width(bar) > width {
+		bar = host + message + section
+	}
+	return bar
+}
+
+func (a app) renderHostCell(s styles) string {
+	c := s.colors
+	led := lipgloss.NewStyle().Background(c.panelHigh)
+	if s.noColor {
+		return "● " + a.hostname + " "
+	}
+	ledColor := healthColor(a.fleetHealth(), c)
+	if a.ledDim {
+		ledColor = c.faint
+	}
+	return led.Foreground(ledColor).Render(" ●") + s.barHost.Render(" "+a.hostname+" ")
+}
+
+func (a app) renderSectionCell(s styles) string {
+	label := " § " + a.sectionLabel() + " "
 	if a.confirmAction != "" {
-		keys = "y/enter confirm doctor · n/esc cancel · q quit"
-		return s.muted.Render(truncatePlain(contextLine, width)) + "\n" +
-			s.faint.Render(truncatePlain(keys, width))
+		return s.barAlert.Render(label)
 	}
-	if a.inspect != "" {
-		keys = "↑↓/jk scroll · esc/backspace back · r refresh · ? help · q quit"
+	return s.barSection.Render(label)
+}
+
+func (a app) renderCountsCell(s styles) string {
+	c := s.colors
+	counts := map[model.HealthStatus]int{}
+	total := 0
+	for _, row := range a.treeRows() {
+		if component, ok := a.graph.Lookup(row.id); ok {
+			counts[normalizedStatus(component.Health.Status)]++
+			total++
+		}
 	}
-	if _, ok := a.doctorAction(a.activeID()); ok && a.opts.RunDoctor != nil {
-		keys = strings.Replace(keys, "r refresh", "d doctor · r refresh", 1)
+	cell := s.barCounts.Render(fmt.Sprintf(" %d obj ", total))
+	for _, status := range []model.HealthStatus{
+		model.HealthHealthy, model.HealthDegraded, model.HealthUnhealthy, model.HealthUnknown,
+	} {
+		if counts[status] == 0 {
+			continue
+		}
+		glyph := healthGlyph(status) + fmt.Sprintf("%d ", counts[status])
+		if s.noColor {
+			cell += glyph
+			continue
+		}
+		cell += lipgloss.NewStyle().
+			Foreground(healthColor(status, c)).
+			Background(c.panelHigh).
+			Render(glyph)
 	}
-	return s.muted.Render(truncatePlain(contextLine, width)) + "\n" +
-		s.faint.Render(truncatePlain(keys, width))
+	return cell
+}
+
+func (a app) renderMessageCell(width int, s styles) string {
+	message := "Read-only view · live state and declared intent share one graph"
+	if a.status != "" {
+		message = a.status
+	}
+	cell := ""
+	reserved := 1
+	if a.busy {
+		cell += s.barMsg.Render(" ") + a.spin.View()
+		reserved += 2
+		if a.status == "" && a.operation != "" {
+			message = a.operation
+		}
+	}
+	cell += s.barMsg.Render(" " + truncatePlain(message, max(1, width-reserved-1)))
+	if padding := width - lipgloss.Width(cell); padding > 0 {
+		cell += s.barMsg.Render(strings.Repeat(" ", padding))
+	}
+	return cell
+}
+
+// renderRibbon lists the keys that matter right now, dropping trailing hints
+// when the terminal cannot hold them all.
+func (a app) renderRibbon(width int, s styles) string {
+	bindings := a.ribbonBindings()
+	fits := len(bindings)
+	for ; fits > 1; fits-- {
+		plain := 0
+		for index := 0; index < fits; index++ {
+			help := bindings[index].Help()
+			plain += runeWidth(help.Key) + 1 + runeWidth(help.Desc)
+		}
+		plain += (fits-1)*3 + 1
+		if plain <= width {
+			break
+		}
+	}
+	parts := make([]string, 0, fits)
+	for index := 0; index < fits; index++ {
+		help := bindings[index].Help()
+		parts = append(parts, s.ribbonKey.Render(help.Key)+" "+s.ribbonDesc.Render(help.Desc))
+	}
+	return " " + strings.Join(parts, s.ribbonSep.Render(" · "))
 }
 
 func (a app) renderTooSmall(width, height int, s styles) string {
@@ -151,6 +379,7 @@ func (a app) renderHelp(width, height int, s styles) string {
 	w.text("? UNKNOWN  Muster does not have enough current evidence", s.unknown)
 	w.blank()
 	w.paragraph("Design rule", "Color reinforces a word and glyph; it never carries status alone.")
+	w.paragraph("Motion", "Scrolling glides and the status LED breathes. Set MUSTER_REDUCE_MOTION=1 to keep the console perfectly still.")
 	return a.panel(width, height, true, "Keyboard and language", w.lines, 0, s)
 }
 
@@ -172,7 +401,7 @@ func (a app) renderTreePanel(width, height int, focused bool, s styles) string {
 	rows := a.treeRows()
 	innerWidth := max(8, width-4)
 	lines := a.renderTreeLines(rows, innerWidth, s)
-	viewportHeight := max(1, height-4)
+	viewportHeight := max(1, height-2)
 	offset := selectedOffset(rows, a.selected, viewportHeight)
 	title := fmt.Sprintf("Implementations · %d objects", len(rows))
 	return a.panel(width, height, focused, title, lines, offset, s)
@@ -185,7 +414,7 @@ func (a app) renderSummaryPanel(width, height int, focused bool, s styles) strin
 	if component, ok := a.graph.Lookup(a.selected); ok {
 		title += " · " + string(component.Kind) + " · " + string(component.ID)
 	}
-	return a.panel(width, height, focused, title, lines, a.scroll, s)
+	return a.panel(width, height, focused, title, lines, a.displayScroll(), s)
 }
 
 func (a app) renderInspector(width, height int, s styles) string {
@@ -195,47 +424,86 @@ func (a app) renderInspector(width, height int, s styles) string {
 	if component, ok := a.graph.Lookup(a.inspect); ok {
 		title = "Inspect · " + string(component.Kind) + " · " + string(component.ID)
 	}
-	return a.panel(width, height, true, title, lines, a.scroll, s)
+	return a.panel(width, height, true, title, lines, a.displayScroll(), s)
 }
 
+// panel draws a framed pane whose title lives inside the top border, the way
+// charm-family tools label their windows. Focus is carried by border weight
+// or color and, in color terminals, by an accent→ember rule.
 func (a app) panel(width, height int, focused bool, title string, lines []string, offset int, s styles) string {
 	width = max(4, width)
 	height = max(3, height)
-	innerWidth := max(1, width-4)
-	innerHeight := max(1, height-2)
-	viewportHeight := max(1, innerHeight-2)
+	viewportHeight := max(1, height-2)
 	visible := viewport(lines, offset, viewportHeight, s)
-	title = truncatePlain(title, innerWidth)
-	content := s.eyebrow.Render(title) + "\n" +
-		s.faint.Render(strings.Repeat("─", innerWidth)) + "\n" +
-		strings.Join(visible, "\n")
-	style := s.panel
+	top := panelTopLine(width, focused, truncatePlain(title, max(0, width-8)), s)
+	style := s.panelBody
 	if focused {
-		style = s.focusedPanel
+		style = s.focusedPanelBody
 	}
-	return style.
+	body := style.
 		Width(width).
-		Height(height).
+		Height(height - 1).
 		MaxWidth(width).
-		MaxHeight(height).
-		Render(content)
+		MaxHeight(height - 1).
+		Render(strings.Join(visible, "\n"))
+	return top + "\n" + body
 }
 
+// panelTopLine draws the top border with the pane's title set into it:
+// ╭─ Title ────────╮. In no-color terminals a focused pane keeps the double
+// border so focus never depends on color.
+func panelTopLine(width int, focused bool, title string, s styles) string {
+	if width < 2 {
+		return ""
+	}
+	cornerL, horizontal, cornerR := "╭", "─", "╮"
+	if s.noColor && focused {
+		cornerL, horizontal, cornerR = "╔", "═", "╗"
+	}
+	lineStyle, titleStyle := s.panelLine, s.panelTitle
+	if focused {
+		lineStyle, titleStyle = s.focusedPanelLine, s.focusedPanelTitle
+	}
+	inner := width - 2
+	if title == "" || runeWidth(title)+4 > inner {
+		return lineStyle.Render(cornerL + strings.Repeat(horizontal, max(0, inner)) + cornerR)
+	}
+	trail := inner - runeWidth(title) - 3
+	head := lineStyle.Render(cornerL+horizontal+" ") + titleStyle.Render(title) + lineStyle.Render(" ")
+	if focused && !s.noColor {
+		ember := lipgloss.NewStyle().Foreground(s.colors.ember)
+		return head + s.gradientRule(trail, horizontal) + ember.Render(cornerR)
+	}
+	return head + lineStyle.Render(strings.Repeat(horizontal, trail)+cornerR)
+}
+
+// viewport windows lines at offset. A negative offset pads the top with
+// blank rows — the inspector uses this to glide new content into place.
 func viewport(lines []string, offset, height int, s styles) []string {
 	if height <= 0 {
 		return nil
 	}
-	maximum := max(0, len(lines)-height)
+	pad := 0
+	if offset < 0 {
+		pad = min(-offset, height)
+		offset = 0
+	}
+	bodyHeight := height - pad
+	maximum := max(0, len(lines)-bodyHeight)
 	offset = clamp(offset, 0, maximum)
-	end := min(len(lines), offset+height)
-	visible := append([]string(nil), lines[offset:end]...)
+	end := min(len(lines), offset+bodyHeight)
+	visible := make([]string, 0, height)
+	for index := 0; index < pad; index++ {
+		visible = append(visible, "")
+	}
+	visible = append(visible, lines[offset:end]...)
 	for len(visible) < height {
 		visible = append(visible, "")
 	}
-	if offset > 0 && len(visible) > 0 {
-		visible[0] = s.faint.Render(fmt.Sprintf("↑ %d more line%s", offset, pluralSuffix(offset)))
+	if offset > 0 && bodyHeight > 0 {
+		visible[pad] = s.faint.Render(fmt.Sprintf("↑ %d more line%s", offset, pluralSuffix(offset)))
 	}
-	if remaining := len(lines) - end; remaining > 0 && len(visible) > 0 {
+	if remaining := len(lines) - end; remaining > 0 && bodyHeight > 0 {
 		visible[len(visible)-1] = s.faint.Render(fmt.Sprintf("↓ %d more line%s", remaining, pluralSuffix(remaining)))
 	}
 	return visible
@@ -528,8 +796,8 @@ func (a app) scrollLimit() int {
 	width, height := a.dimensions()
 	headerHeight := 3
 	footerHeight := 2
-	bodyHeight := max(3, height-headerHeight-footerHeight-2)
-	viewportHeight := max(1, bodyHeight-4)
+	bodyHeight := max(3, height-headerHeight-footerHeight)
+	viewportHeight := max(1, bodyHeight-2)
 	s := newStyles(a.dark, a.noColor)
 	var lineCount int
 	if a.inspect != "" {
@@ -653,26 +921,47 @@ func (a app) renderTreeLines(rows []treeRow, width int, s styles) []string {
 		if !ok {
 			continue
 		}
-		indicator := "  "
-		if row.id == a.selected {
-			indicator = "▸ "
-		}
-		statusWord := strings.ToUpper(string(normalizedStatus(component.Health.Status)))
-		plainPrefix := indicator + row.prefix
-		nameWidth := max(1, width-runeWidth(plainPrefix)-runeWidth(statusWord)-5)
-		name := truncatePlain(displayName(*component), nameWidth)
-		line := plainPrefix + healthStyle(component.Health.Status, s).Render(healthGlyph(component.Health.Status)) +
-			" " + name + " · " + statusWord
-		if row.id == a.selected {
-			line = s.selected.Width(width).MaxWidth(width).Render(line)
-		} else if row.root {
-			line = s.title.Render(line)
-		} else {
-			line = s.body.Render(line)
-		}
-		lines = append(lines, line)
+		lines = append(lines, a.renderTreeRow(row, *component, width, s))
 	}
 	return lines
+}
+
+// renderTreeRow lays out one object: selection bar, tree lineage, health
+// glyph, name, and a right-aligned status word. The selected row reads as a
+// charm-style list item — accent bar on a raised background.
+func (a app) renderTreeRow(row treeRow, component model.Component, width int, s styles) string {
+	selected := row.id == a.selected
+	indicator := "  "
+	if selected {
+		indicator = "▌ "
+	}
+	glyph := healthGlyph(component.Health.Status)
+	statusWord := strings.ToUpper(string(normalizedStatus(component.Health.Status)))
+	nameWidth := max(1, width-runeWidth(indicator+row.prefix)-runeWidth(glyph)-runeWidth(statusWord)-3)
+	name := truncatePlain(displayName(component), nameWidth)
+	padding := max(1, width-runeWidth(indicator+row.prefix)-runeWidth(glyph)-1-runeWidth(name)-runeWidth(statusWord))
+
+	if s.noColor {
+		return indicator + row.prefix + glyph + " " + name + strings.Repeat(" ", padding) + statusWord
+	}
+	if selected {
+		raised := lipgloss.NewStyle().Background(s.colors.panelHigh)
+		return s.selectedBar.Render("▌ ") +
+			raised.Foreground(s.colors.faint).Render(row.prefix) +
+			raised.Foreground(healthColor(component.Health.Status, s.colors)).Render(glyph) +
+			s.selected.Render(" "+name) +
+			raised.Render(strings.Repeat(" ", padding)) +
+			raised.Foreground(s.colors.muted).Render(statusWord)
+	}
+	nameStyle := s.body
+	if row.root {
+		nameStyle = s.title
+	}
+	return indicator + s.faint.Render(row.prefix) +
+		healthStyle(component.Health.Status, s).Render(glyph) +
+		nameStyle.Render(" "+name) +
+		strings.Repeat(" ", padding) +
+		s.faint.Render(statusWord)
 }
 
 func selectedOffset(rows []treeRow, selected model.ID, height int) int {

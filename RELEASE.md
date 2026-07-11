@@ -1,21 +1,18 @@
-# Muster 0.1.0
+# Muster 0.1.1
 
-The first Muster host inspector turns the framework's operational vocabulary
-into one addressable runtime object graph.
+Muster 0.1.1 makes the shared host inspector feel at home in the terminal while
+preserving its single, addressable runtime object graph.
 
-## Added
+## Changed
 
-- A shared `muster` executable built with Bubble Tea v2 and Lip Gloss v2.
-- A responsive, keyboard-first TUI for implementations, components, recursive
-  health, pattern trees, doctor evidence, and literate explanations.
-- Scriptable `list`, `status`, `inspect`, `explain`, `doctor`, `export`,
-  `validate`, `compile`, and `version` commands with JSON output.
-- Schema 2 authoring manifests and deterministic `muster.lock.json` release
-  projections.
-- A shared-core bootstrap under `/opt/muster`, a managed PATH symlink, and
-  independently owned implementation registrations.
-- Structured `muster.observation/v1` doctor evidence.
-- Linux amd64, arm64, and armv7 core artifacts with SHA256 manifests.
+- Refined the full-screen inspector with a colorful wordmark, clearer panel
+  titles, health-aware counts, a segmented status bar, and contextual key hints.
+- Added spring-smoothed navigation, an animated activity indicator, and a
+  breathing fleet-health signal using Bubbles and Harmonica.
+- Added `MUSTER_REDUCE_MOTION=1` for an entirely still console.
+- Made doctor confirmation an unmistakable modal that remains within the
+  smallest supported terminal.
+- Updated Bubble Tea, Bubbles, Lip Gloss, and the supporting Charm libraries.
 
 ## Operational contract
 
@@ -28,6 +25,5 @@ into one addressable runtime object graph.
   is rendered as unknown rather than reusing an old green result.
 - Recursive health exports retain both declared and effective values so
   `muster explain` can show the actual component and graph path responsible.
-- Project releases are staged, identity/lock/archive validated, published
-  immutably, and activated with registration plus managed files in one
-  rollback-aware transaction.
+- Core releases remain checksum-verified, immutable, and independently
+  versioned from implementation releases.
