@@ -22,6 +22,16 @@ Preferred release install:
 curl -fsSL https://github.com/azide0x37/bt-audio-gateway/releases/latest/download/install.sh | sudo sh
 ```
 
+On a fresh install, the installer uses the invoking `sudo` user when the
+legacy `pi` default does not exist. To choose another existing non-root user:
+
+```sh
+curl -fsSL https://github.com/azide0x37/bt-audio-gateway/releases/latest/download/install.sh | sudo MUSTER_AUDIO_USER=audio sh
+```
+
+The installer refuses nonexistent or root audio users and does not report
+success when the configured snapclient instance fails to start.
+
 Development install from a checkout:
 
 ```sh

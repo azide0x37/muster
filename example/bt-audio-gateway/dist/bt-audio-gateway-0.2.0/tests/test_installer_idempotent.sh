@@ -5,6 +5,7 @@ ROOT="$(mktemp -d)"
 trap 'rm -rf "$ROOT"' EXIT INT TERM
 
 : "${MUSTER_CLI_SOURCE:?MUSTER_CLI_SOURCE must point to the tested Muster core binary}"
+AUDIO_USER_TEST=$(id -un)
 
 release_inventory() {
   release="$1"
@@ -21,22 +22,23 @@ release_inventory() {
   done > "$output"
 }
 
-MUSTER_ROOT="$ROOT" MUSTER_SKIP_PACKAGES=1 ./bin/install.sh
+MUSTER_ROOT="$ROOT" MUSTER_SKIP_PACKAGES=1 MUSTER_AUDIO_USER="$AUDIO_USER_TEST" ./bin/install.sh
 
 CONFIG="$ROOT/etc/bt-audio-gateway/bt-audio-gateway.env"
 RELEASE="$ROOT/opt/bt-audio-gateway/releases/$(cat VERSION)"
 test -f "$CONFIG"
+grep -q "^AUDIO_USER=$AUDIO_USER_TEST$" "$CONFIG"
 printf '\n# user retained setting\n' >> "$CONFIG"
 release_inventory "$RELEASE" "$ROOT/release.before"
 test ! -w "$RELEASE/muster.yaml"
 
-MUSTER_ROOT="$ROOT" MUSTER_SKIP_PACKAGES=1 ./bin/install.sh
+MUSTER_ROOT="$ROOT" MUSTER_SKIP_PACKAGES=1 MUSTER_AUDIO_USER="$AUDIO_USER_TEST" ./bin/install.sh
 release_inventory "$RELEASE" "$ROOT/release.after"
 cmp "$ROOT/release.before" "$ROOT/release.after"
 
-MUSTER_ROOT="$ROOT" MUSTER_SKIP_PACKAGES=1 ./bin/install.sh > "$ROOT/concurrent-1.log" 2>&1 &
+MUSTER_ROOT="$ROOT" MUSTER_SKIP_PACKAGES=1 MUSTER_AUDIO_USER="$AUDIO_USER_TEST" ./bin/install.sh > "$ROOT/concurrent-1.log" 2>&1 &
 first_pid=$!
-MUSTER_ROOT="$ROOT" MUSTER_SKIP_PACKAGES=1 ./bin/install.sh > "$ROOT/concurrent-2.log" 2>&1 &
+MUSTER_ROOT="$ROOT" MUSTER_SKIP_PACKAGES=1 MUSTER_AUDIO_USER="$AUDIO_USER_TEST" ./bin/install.sh > "$ROOT/concurrent-2.log" 2>&1 &
 second_pid=$!
 wait "$first_pid"
 wait "$second_pid"

@@ -29,3 +29,8 @@ and start time for bounded dead-owner recovery. Valid version directories are
 reused without mutation. Switching current, registration, and managed systemd
 units is rollback-aware, and previous files are restored atomically when graph
 validation or `doctor.sh` fails.
+
+The installer accepts only an existing non-root audio account. It preserves a
+valid configured account, requires `MUSTER_AUDIO_USER` before replacing an
+intentional invalid value, and only auto-migrates the historical `pi` default
+when the invoking sudo account is valid.

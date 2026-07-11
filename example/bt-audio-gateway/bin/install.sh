@@ -20,6 +20,8 @@ VERSION=""
 RELEASE_DIR=""
 REGISTRATION="$ROOT/etc/muster/implementations.d/$PROJECT.json"
 TRANSACTION_ACTIVE=0
+AUDIO_USER_VALUE=""
+MIGRATED_AUDIO_USER_FROM=""
 
 # shellcheck disable=SC1091
 . "$SCRIPT_DIR/release-transaction.sh"
@@ -167,6 +169,83 @@ install_config() {
   log "Installed example config at $CONFIG_FILE"
 }
 
+audio_user_exists() {
+  candidate="$1"
+  [ -n "$candidate" ] && [ "$candidate" != "root" ] && id -u "$candidate" >/dev/null 2>&1
+}
+
+replacement_audio_user() {
+  if [ -n "${MUSTER_AUDIO_USER:-}" ]; then
+    printf '%s\n' "$MUSTER_AUDIO_USER"
+    return 0
+  fi
+  if audio_user_exists "${SUDO_USER:-}"; then
+    printf '%s\n' "$SUDO_USER"
+    return 0
+  fi
+  if [ -n "$ROOT" ]; then
+    staged_user=$(id -un 2>/dev/null || true)
+    if audio_user_exists "$staged_user"; then
+      printf '%s\n' "$staged_user"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+write_audio_user() {
+  replacement="$1"
+  case "$replacement" in
+    ''|*[!A-Za-z0-9_.-]*) release_die "invalid audio user name: $replacement" ;;
+  esac
+  audio_user_exists "$replacement" || release_die "audio user does not exist or is not allowed: $replacement"
+  config_stage=$(mktemp "$CONFIG_DIR/.audio-user.XXXXXX") || release_die "could not stage audio user configuration"
+  if ! awk -v user="$replacement" '
+    BEGIN { replaced = 0 }
+    /^AUDIO_USER=/ { print "AUDIO_USER=" user; replaced = 1; next }
+    { print }
+    END { if (!replaced) print "AUDIO_USER=" user }
+  ' "$CONFIG_FILE" > "$config_stage"; then
+    rm -f "$config_stage"
+    release_die "could not write audio user configuration"
+  fi
+  chmod 0644 "$config_stage"
+  mv -f "$config_stage" "$CONFIG_FILE"
+}
+
+resolve_audio_user() {
+  [ -f "$CONFIG_FILE" ] || release_die "missing configuration: $CONFIG_FILE"
+  # shellcheck disable=SC1090
+  . "$CONFIG_FILE"
+  configured="${AUDIO_USER:-}"
+
+  if [ -n "${MUSTER_AUDIO_USER:-}" ]; then
+    replacement=$(replacement_audio_user) || release_die "MUSTER_AUDIO_USER must name an existing non-root user"
+    audio_user_exists "$replacement" || release_die "MUSTER_AUDIO_USER must name an existing non-root user"
+    if [ "$configured" != "$replacement" ]; then
+      MIGRATED_AUDIO_USER_FROM="$configured"
+      write_audio_user "$replacement"
+      log "Configured audio user $replacement from MUSTER_AUDIO_USER"
+    fi
+    AUDIO_USER_VALUE="$replacement"
+    return 0
+  fi
+
+  if audio_user_exists "$configured"; then
+    AUDIO_USER_VALUE="$configured"
+    return 0
+  fi
+
+  replacement=$(replacement_audio_user) || release_die "audio user $configured does not exist; rerun with MUSTER_AUDIO_USER=<existing-user>"
+  if [ "$configured" != "pi" ]; then
+    release_die "audio user $configured does not exist; refusing to rewrite an intentional setting without MUSTER_AUDIO_USER"
+  fi
+  MIGRATED_AUDIO_USER_FROM="$configured"
+  write_audio_user "$replacement"
+  AUDIO_USER_VALUE="$replacement"
+  log "Migrated legacy audio user $configured to $replacement"
+}
+
 validate_registration() {
   if [ -n "$ROOT" ]; then
     "$ROOT/usr/local/bin/muster" --root "$ROOT" validate
@@ -197,18 +276,12 @@ activate_release() {
 
 enable_audio_user() {
   [ -z "$ROOT" ] || return 0
-  [ -f "$CONFIG_FILE" ] || return 0
-  # shellcheck disable=SC1090
-  . "$CONFIG_FILE"
-  audio_user="${AUDIO_USER:-pi}"
-  uid_num=$(id -u "$audio_user" 2>/dev/null || true)
-  if [ -z "$uid_num" ]; then
-    log "Audio user $audio_user does not exist yet; skipping user audio enablement"
-    return 0
+  uid_num=$(id -u "$AUDIO_USER_VALUE")
+  loginctl enable-linger "$AUDIO_USER_VALUE" || release_die "could not enable linger for audio user $AUDIO_USER_VALUE"
+  if ! sudo -u "$AUDIO_USER_VALUE" XDG_RUNTIME_DIR="/run/user/$uid_num" \
+    systemctl --user enable --now pipewire pipewire-pulse wireplumber; then
+    release_die "could not enable PipeWire services for audio user $AUDIO_USER_VALUE"
   fi
-  loginctl enable-linger "$audio_user" >/dev/null 2>&1 || true
-  sudo -u "$audio_user" XDG_RUNTIME_DIR="/run/user/$uid_num" \
-    systemctl --user enable --now pipewire pipewire-pulse wireplumber >/dev/null 2>&1 || true
 }
 
 enable_systemd() {
@@ -217,10 +290,11 @@ enable_systemd() {
   systemctl daemon-reload
   systemctl enable --now bt-audio-watch.service
   systemctl enable --now bt-audio-doctor.timer bt-audio-update.timer
-  # shellcheck disable=SC1090
-  . "$CONFIG_FILE"
-  if [ -n "${AUDIO_USER:-}" ]; then
-    systemctl enable --now "snapclient-bt@$AUDIO_USER.service" || true
+  if [ -n "$MIGRATED_AUDIO_USER_FROM" ] && [ "$MIGRATED_AUDIO_USER_FROM" != "$AUDIO_USER_VALUE" ]; then
+    systemctl disable --now "snapclient-bt@$MIGRATED_AUDIO_USER_FROM.service" >/dev/null 2>&1 || true
+  fi
+  if ! systemctl enable --now "snapclient-bt@$AUDIO_USER_VALUE.service"; then
+    release_die "snapclient-bt@$AUDIO_USER_VALUE.service failed to start; inspect it with systemctl status and journalctl"
   fi
 }
 
@@ -230,6 +304,7 @@ release_acquire_lock
 prepare_release
 install_packages
 install_config
+resolve_audio_user
 "$RELEASE_DIR/bin/muster-bootstrap.sh" ensure
 release_snapshot_state
 activate_release
