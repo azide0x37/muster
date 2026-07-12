@@ -2,6 +2,20 @@
 
 All notable changes to the shared Muster core are documented here.
 
+## 0.1.2 - 2026-07-11
+
+### Changed
+
+- Rebuilt the terminal inspector around implementation cards and operational
+  triage.
+- Added healthy-subtree folding with automatic expansion of unhealthy paths.
+- Added a live cross-implementation filter with match highlighting and lineage.
+- Added viewport scrolling, proportional scrollbars, page keys, and mouse-wheel
+  support to detail and help views.
+- Added navigable tables for observation checks and metadata.
+- Prioritized verdicts, health causes, and current evidence while omitting
+  undeclared placeholder sections.
+
 ## 0.1.1 - 2026-07-11
 
 ### Changed

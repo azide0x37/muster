@@ -159,14 +159,15 @@ leaves it intact. Automatic core upgrade/removal is intentionally deferred to
 an explicit operator-management surface rather than being owned by whichever
 service happened to install next.
 
-Run `muster` in a terminal to open the full-screen inspector. It presents the
-Muster implementations on the current server, recursively derived health,
-systemd components, runtime state, the exact pattern tree claimed by each
-release, structured doctor evidence, and literate answers to “what is this?”
-and “why is it here?” The interface uses Bubble Tea, Bubbles, and Lip Gloss for
-responsive navigation, live activity and health signals, contextual key hints,
-and an explicit modal before doctor execution. Set `MUSTER_REDUCE_MOTION=1` to
-disable spring scrolling, transitions, and blinking while retaining the same
+Run `muster` in a terminal to open the full-screen inspector. It presents each
+implementation as a health-aware card, folds fully healthy subtrees, and opens
+the paths that need attention. `/` filters across cards while preserving match
+lineage; detail panes use viewport scrolling, proportional scrollbars, and
+navigable evidence and metadata tables. Overview and inspect views lead with
+verdicts, health causes, and current observations before literate context. The
+same screen still exposes systemd components, runtime state, exact installed
+pattern trees, and explicit doctor confirmation. Set `MUSTER_REDUCE_MOTION=1`
+to disable spring scrolling, transitions, and blinking while retaining the same
 information and controls.
 
 The same object graph remains available without a TTY:
