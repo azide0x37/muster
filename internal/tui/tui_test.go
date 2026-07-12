@@ -34,10 +34,12 @@ func TestRenderWideBrowserIsDeterministicAndLiterate(t *testing.T) {
 	assertContains(t, first,
 		"Muster implementations on shed-pi-01",
 		"2 implementations · 1 healthy · 1 degraded",
-		"Implementations · 7 objects",
+		"/ filter",
+		"7 objects",
 		"Media Gateway",
+		"1.2.3",
 		"Device-triggered Conveyor",
-		"Weather Station ▸ 2",
+		"Weather Station · 2 objects · 0.4.0",
 		"Selected object",
 		"HEALTH CAUSES",
 		"LATEST EVIDENCE",
@@ -102,6 +104,27 @@ func TestRenderInspectorShowsCompleteGenericObject(t *testing.T) {
 	)
 }
 
+func TestSidebarRendersCardsAndStrips(t *testing.T) {
+	graph := fixtureGraph(t)
+	base := RenderOptions{Hostname: "shed-pi-01", Width: 118, Height: 34, NoColor: true}
+
+	strip := base
+	strip.Selected = "implementation:weather-station"
+	output := Render(graph, strip)
+	assertContains(t, output,
+		"▌▸ ● Weather Station · 2 objects · 0.4.0",
+		"─ ◐ Media Gateway",
+	)
+
+	header := base
+	header.Selected = "implementation:media-gateway"
+	output = Render(graph, header)
+	assertContains(t, output,
+		"╔▌ ◐ Media Gateway",
+		" ▸ ● Weather Station · 2 objects · 0.4.0",
+	)
+}
+
 func TestInspectOmitsUndeclaredSections(t *testing.T) {
 	graph := fixtureGraph(t)
 	output := Render(graph, RenderOptions{
@@ -147,7 +170,7 @@ func TestNarrowLayoutUsesOnePaneAndNeverOverflows(t *testing.T) {
 
 	assertContains(t, output,
 		"Muster implementations on edge-box",
-		"Implementations · 7 objects",
+		"7 objects",
 		"Device-triggered Conveyor",
 	)
 	if strings.Contains(output, "Selected object") {

@@ -393,23 +393,252 @@ func (a app) renderBrowser(width, height int, s styles) string {
 		if a.focus == focusDetail {
 			return a.renderSummaryPanel(width, height, true, s)
 		}
-		return a.renderTreePanel(width, height, true, s)
+		return a.renderSidebar(width, height, true, s)
 	}
 	leftWidth := clamp(width*38/100, 34, 50)
 	rightWidth := width - leftWidth - 1
-	left := a.renderTreePanel(leftWidth, height, a.focus == focusTree, s)
+	left := a.renderSidebar(leftWidth, height, a.focus == focusTree, s)
 	right := a.renderSummaryPanel(rightWidth, height, a.focus == focusDetail, s)
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, " ", right)
 }
 
-func (a app) renderTreePanel(width, height int, focused bool, s styles) string {
+// renderSidebar stacks a filter line and one card per implementation, in place
+// of a single framed tree: the card border carries the implementation's
+// identity, so the tree inside starts a level shallower.
+func (a app) renderSidebar(width, height int, focused bool, s styles) string {
+	lines, selectedLine := a.sidebarLines(width, focused, s)
+	offset := 0
+	if selectedLine >= height {
+		offset = selectedLine - height + 1
+	}
+	visible := viewport(lines, offset, height, s)
+	for index, line := range visible {
+		if lipgloss.Width(line) < width {
+			visible[index] = line + strings.Repeat(" ", width-lipgloss.Width(line))
+		}
+	}
+	return strings.Join(visible, "\n")
+}
+
+// sidebarLines returns the composed sidebar and the line the selected row is
+// on, so the viewport can keep the selection in view across card borders.
+func (a app) sidebarLines(width int, focused bool, s styles) ([]string, int) {
+	lines := []string{a.renderFilterLine(width, s), ""}
+	selectedLine := 0
 	rows := a.treeRows()
-	innerWidth := max(8, width-4)
-	lines := a.renderTreeLines(rows, innerWidth, s)
-	viewportHeight := max(1, height-2)
-	offset := selectedOffset(rows, a.selected, viewportHeight)
-	title := fmt.Sprintf("Implementations · %d objects", len(a.allTreeRows()))
-	return a.panel(width, height, focused, title, lines, offset, s)
+	if len(rows) == 0 {
+		lines = append(lines,
+			s.section.Render("NO IMPLEMENTATIONS REGISTERED"),
+			s.body.Render("The first Muster service installed on this server will appear here."),
+		)
+		return lines, 0
+	}
+	appendCardRows := func(cardRows []treeRow, root treeRow) {
+		component, ok := a.graph.Lookup(root.id)
+		if !ok {
+			return
+		}
+		selected := root.id == a.selected
+		cardFocused := focused && a.cardContainsSelection(root, cardRows)
+		if root.hidden > 0 {
+			if selected {
+				selectedLine = len(lines)
+			}
+			lines = append(lines, a.renderStrip(root, *component, width, s))
+			lines = append(lines, "")
+			return
+		}
+		if selected {
+			selectedLine = len(lines)
+		}
+		lines = append(lines, a.cardTop(root, *component, width, cardFocused, s))
+		for _, row := range cardRows {
+			rowComponent, found := a.graph.Lookup(row.id)
+			if !found {
+				continue
+			}
+			if row.id == a.selected {
+				selectedLine = len(lines)
+			}
+			inner := a.renderTreeRow(row, *rowComponent, width-4, s)
+			lines = append(lines, a.cardWrap(inner, width, cardFocused, s))
+		}
+		lines = append(lines, a.cardBottom(root, width, cardFocused, s))
+		lines = append(lines, "")
+	}
+	var root treeRow
+	var cardRows []treeRow
+	started := false
+	for _, row := range rows {
+		if row.root {
+			if started {
+				appendCardRows(cardRows, root)
+			}
+			root = row
+			cardRows = nil
+			started = true
+			continue
+		}
+		cardRows = append(cardRows, row)
+	}
+	if started {
+		appendCardRows(cardRows, root)
+	}
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines, selectedLine
+}
+
+func (a app) cardContainsSelection(root treeRow, cardRows []treeRow) bool {
+	if root.id == a.selected {
+		return true
+	}
+	for _, row := range cardRows {
+		if row.id == a.selected {
+			return true
+		}
+	}
+	return false
+}
+
+// renderFilterLine idles as a quiet affordance above the cards; the filter
+// itself arrives with the / keybinding.
+func (a app) renderFilterLine(width int, s styles) string {
+	left := " / filter"
+	right := fmt.Sprintf("%d objects ", len(a.allTreeRows()))
+	gap := max(1, width-runeWidth(left)-runeWidth(right))
+	if s.noColor {
+		return left + strings.Repeat(" ", gap) + right
+	}
+	return s.ribbonKey.Render(" /") + s.faint.Render(" filter") +
+		strings.Repeat(" ", gap) + s.faint.Render(right)
+}
+
+// cardTop sets the implementation's glyph, name, and any status word into the
+// card's top border. The card holding the selection wears the focus border.
+func (a app) cardTop(root treeRow, component model.Component, width int, focused bool, s styles) string {
+	glyph := healthGlyph(component.Health.Status)
+	status := ""
+	if health := normalizedStatus(component.Health.Status); health != model.HealthHealthy {
+		status = strings.ToUpper(string(health))
+	}
+	cornerL, horizontal, cornerR := "╭", "─", "╮"
+	if s.noColor && focused {
+		cornerL, horizontal, cornerR = "╔", "═", "╗"
+	}
+	lineStyle := s.panelLine
+	if focused {
+		lineStyle = s.focusedPanelLine
+	}
+	selected := root.id == a.selected
+	bar := horizontal
+	if selected {
+		bar = "▌"
+	}
+	title := truncatePlain(root.label, max(1, width-len(status)-12))
+	headPlain := cornerL + bar + " " + glyph + " " + title + " "
+	tailPlain := ""
+	if status != "" {
+		tailPlain = " " + status + " " + horizontal
+	}
+	fill := max(0, width-runeWidth(headPlain)-runeWidth(tailPlain)-1)
+	if s.noColor {
+		return headPlain + strings.Repeat(horizontal, fill) + tailPlain + cornerR
+	}
+	barStyle := lineStyle
+	if selected {
+		barStyle = s.selectedBar
+	}
+	head := lineStyle.Render(cornerL) + barStyle.Render(bar) + lineStyle.Render(" ") +
+		healthStyle(component.Health.Status, s).Render(glyph) +
+		s.title.Render(" "+title) + lineStyle.Render(" ")
+	tail := ""
+	if status != "" {
+		tail = healthStyle(component.Health.Status, s).Render(" "+status) + lineStyle.Render(" "+horizontal)
+	}
+	if focused {
+		ember := lipgloss.NewStyle().Foreground(s.colors.ember)
+		return head + s.gradientRule(fill, horizontal) + tail + ember.Render(cornerR)
+	}
+	return head + lineStyle.Render(strings.Repeat(horizontal, fill)) + tail + lineStyle.Render(cornerR)
+}
+
+// cardBottom closes the card and carries quiet facts: the version and, when a
+// filter is narrowing the view, how much of the implementation is shown.
+func (a app) cardBottom(root treeRow, width int, focused bool, s styles) string {
+	cornerL, horizontal, cornerR := "╰", "─", "╯"
+	if s.noColor && focused {
+		cornerL, horizontal, cornerR = "╚", "═", "╝"
+	}
+	lineStyle := s.panelLine
+	if focused {
+		lineStyle = s.focusedPanelLine
+	}
+	note := ""
+	if implementation, found := a.implementation(root.id); found && implementation.Version != "" {
+		note = implementation.Version
+	}
+	if note == "" {
+		line := cornerL + strings.Repeat(horizontal, max(0, width-2)) + cornerR
+		return lineStyle.Render(line)
+	}
+	note = truncatePlain(note, max(1, width-6))
+	fill := max(0, width-runeWidth(note)-5)
+	if s.noColor {
+		return cornerL + horizontal + " " + note + " " + strings.Repeat(horizontal, fill) + cornerR
+	}
+	return lineStyle.Render(cornerL+horizontal+" ") + s.faint.Render(note) +
+		lineStyle.Render(" "+strings.Repeat(horizontal, fill)+cornerR)
+}
+
+func (a app) cardWrap(inner string, width int, focused bool, s styles) string {
+	vertical := "│"
+	if s.noColor && focused {
+		vertical = "║"
+	}
+	lineStyle := s.panelLine
+	if focused {
+		lineStyle = s.focusedPanelLine
+	}
+	if lipgloss.Width(inner) < width-4 {
+		inner += strings.Repeat(" ", width-4-lipgloss.Width(inner))
+	}
+	if s.noColor {
+		return vertical + " " + inner + " " + vertical
+	}
+	return lineStyle.Render(vertical) + " " + inner + " " + lineStyle.Render(vertical)
+}
+
+// renderStrip is a folded implementation: one raised line holding everything
+// an operator needs to decide whether to open it.
+func (a app) renderStrip(root treeRow, component model.Component, width int, s styles) string {
+	selected := root.id == a.selected
+	glyph := healthGlyph(component.Health.Status)
+	indicator := " ▸"
+	if selected {
+		indicator = "▌▸"
+	}
+	detail := fmt.Sprintf(" · %d %s", root.hidden, plural(root.hidden, "object", "objects"))
+	if implementation, found := a.implementation(root.id); found && implementation.Version != "" {
+		detail += " · " + implementation.Version
+	}
+	name := truncatePlain(root.label, max(1, width-runeWidth(indicator)-runeWidth(detail)-4))
+	plain := indicator + " " + glyph + " " + name + detail
+	if s.noColor {
+		return truncatePlain(plain, width)
+	}
+	raised := lipgloss.NewStyle().Background(s.colors.panelHigh)
+	indicatorStyle := raised.Foreground(s.colors.faint)
+	if selected {
+		indicatorStyle = raised.Foreground(s.colors.accent).Bold(true)
+	}
+	padding := max(0, width-runeWidth(plain))
+	return indicatorStyle.Render(indicator) + raised.Render(" ") +
+		raised.Foreground(healthColor(component.Health.Status, s.colors)).Render(glyph) +
+		raised.Foreground(s.colors.fg).Bold(true).Render(" "+name) +
+		raised.Foreground(s.colors.faint).Render(detail) +
+		raised.Render(strings.Repeat(" ", padding))
 }
 
 func (a app) renderSummaryPanel(width, height int, focused bool, s styles) string {
@@ -1018,24 +1247,6 @@ func clonePath(source map[model.ID]bool) map[model.ID]bool {
 	return result
 }
 
-func (a app) renderTreeLines(rows []treeRow, width int, s styles) []string {
-	if len(rows) == 0 {
-		return []string{
-			s.section.Render("NO IMPLEMENTATIONS REGISTERED"),
-			s.body.Render("The first Muster service installed on this server will appear here."),
-		}
-	}
-	lines := make([]string, 0, len(rows))
-	for _, row := range rows {
-		component, ok := a.graph.Lookup(row.id)
-		if !ok {
-			continue
-		}
-		lines = append(lines, a.renderTreeRow(row, *component, width, s))
-	}
-	return lines
-}
-
 // renderTreeRow lays out one object: selection bar, tree lineage, health
 // glyph, contextual name, fold count, and a right-aligned status word. The
 // selected row reads as a charm-style list item — accent bar on a raised
@@ -1083,20 +1294,6 @@ func (a app) renderTreeRow(row treeRow, component model.Component, width int, s 
 		s.faint.Render(foldMark) +
 		strings.Repeat(" ", padding) +
 		healthStyle(component.Health.Status, s).Render(statusWord)
-}
-
-func selectedOffset(rows []treeRow, selected model.ID, height int) int {
-	index := 0
-	for candidate, row := range rows {
-		if row.id == selected {
-			index = candidate
-			break
-		}
-	}
-	if index < height {
-		return 0
-	}
-	return index - height + 1
 }
 
 // systemdUnitSuffixes mark ID tails that are operational identifiers — the
