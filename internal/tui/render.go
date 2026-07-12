@@ -185,6 +185,8 @@ func (a app) sectionLabel() string {
 		return "HELP"
 	case a.inspect != "":
 		return "INSPECT"
+	case a.filterEditing || a.filterQuery() != "":
+		return "FILTER"
 	default:
 		return "BROWSE"
 	}
@@ -308,6 +310,10 @@ func (a app) renderMessageCell(width int, s styles) string {
 	message := "Read-only"
 	if !a.refreshedAt.IsZero() {
 		message += " · state as of " + a.refreshedAt.Format("15:04:05")
+	}
+	if query := a.filterQuery(); query != "" && a.inspect == "" {
+		message = fmt.Sprintf("%d of %d objects match “%s”",
+			a.filterMatchCount(), len(a.allTreeRows()), query)
 	}
 	if a.status != "" {
 		message = a.status
@@ -463,7 +469,7 @@ func (a app) sidebarLines(width int, focused bool, s styles) ([]string, int) {
 			inner := a.renderTreeRow(row, *rowComponent, width-4, s)
 			lines = append(lines, a.cardWrap(inner, width, cardFocused, s))
 		}
-		lines = append(lines, a.cardBottom(root, width, cardFocused, s))
+		lines = append(lines, a.cardBottom(root, len(cardRows), width, cardFocused, s))
 		lines = append(lines, "")
 	}
 	var root treeRow
@@ -502,17 +508,56 @@ func (a app) cardContainsSelection(root treeRow, cardRows []treeRow) bool {
 	return false
 }
 
-// renderFilterLine idles as a quiet affordance above the cards; the filter
-// itself arrives with the / keybinding.
+// renderFilterLine is the textinput's home above the cards: a quiet
+// affordance when idle, the live input while editing, and the applied query
+// with its match count once accepted.
 func (a app) renderFilterLine(width int, s styles) string {
-	left := " / filter"
-	right := fmt.Sprintf("%d objects ", len(a.allTreeRows()))
-	gap := max(1, width-runeWidth(left)-runeWidth(right))
+	query := a.filterQuery()
+	if !a.filterEditing && query == "" {
+		left := " / filter"
+		right := fmt.Sprintf("%d objects ", len(a.allTreeRows()))
+		gap := max(1, width-runeWidth(left)-runeWidth(right))
+		if s.noColor {
+			return left + strings.Repeat(" ", gap) + right
+		}
+		return s.ribbonKey.Render(" /") + s.faint.Render(" filter") +
+			strings.Repeat(" ", gap) + s.faint.Render(right)
+	}
+	matches := a.filterMatchCount()
+	right := fmt.Sprintf("%d %s ", matches, plural(matches, "match", "matches"))
+	var left string
+	if a.filterEditing {
+		left = a.filter.View()
+	} else if s.noColor {
+		left = " / " + query
+	} else {
+		left = s.ribbonKey.Render(" /") + " " + s.title.Render(query)
+	}
+	gap := max(1, width-lipgloss.Width(left)-runeWidth(right))
 	if s.noColor {
 		return left + strings.Repeat(" ", gap) + right
 	}
-	return s.ribbonKey.Render(" /") + s.faint.Render(" filter") +
-		strings.Repeat(" ", gap) + s.faint.Render(right)
+	rightStyle := s.faint
+	if matches > 0 {
+		rightStyle = s.ribbonKey
+	}
+	return left + strings.Repeat(" ", gap) + rightStyle.Render(right)
+}
+
+// filterMatchCount counts objects that themselves match the query, across
+// the whole graph regardless of folding.
+func (a app) filterMatchCount() int {
+	query := a.filterQuery()
+	if query == "" {
+		return 0
+	}
+	count := 0
+	for _, row := range a.allTreeRows() {
+		if component, ok := a.graph.Lookup(row.id); ok && matchesQuery(*component, row.label, query) {
+			count++
+		}
+	}
+	return count
 }
 
 // cardTop sets the implementation's glyph, name, and any status word into the
@@ -566,7 +611,7 @@ func (a app) cardTop(root treeRow, component model.Component, width int, focused
 
 // cardBottom closes the card and carries quiet facts: the version and, when a
 // filter is narrowing the view, how much of the implementation is shown.
-func (a app) cardBottom(root treeRow, width int, focused bool, s styles) string {
+func (a app) cardBottom(root treeRow, shown, width int, focused bool, s styles) string {
 	cornerL, horizontal, cornerR := "╰", "─", "╯"
 	if s.noColor && focused {
 		cornerL, horizontal, cornerR = "╚", "═", "╝"
@@ -578,6 +623,15 @@ func (a app) cardBottom(root treeRow, width int, focused bool, s styles) string 
 	note := ""
 	if implementation, found := a.implementation(root.id); found && implementation.Version != "" {
 		note = implementation.Version
+	}
+	if a.filterQuery() != "" {
+		total := countDescendants(a.graph, a.nodeChildren(root.id))
+		counted := fmt.Sprintf("%d of %d shown", shown, total)
+		if note == "" {
+			note = counted
+		} else {
+			note += " · " + counted
+		}
 	}
 	if note == "" {
 		line := cornerL + strings.Repeat(horizontal, max(0, width-2)) + cornerR
@@ -1082,6 +1136,12 @@ func (a app) buildTreeRows(fold bool) []treeRow {
 	if a.graph == nil {
 		return nil
 	}
+	// Filtering is a view concern like folding: the full walk ignores it so
+	// counters and ancestry lookups always see every object.
+	query := ""
+	if fold {
+		query = a.filterQuery()
+	}
 	rows := make([]treeRow, 0, len(a.graph.Components))
 	for _, implementation := range a.graph.Implementations {
 		root, ok := a.graph.Lookup(implementation.ID)
@@ -1091,7 +1151,20 @@ func (a app) buildTreeRows(fold bool) []treeRow {
 		children := a.implementationChildren(implementation, root)
 		rootName := displayName(*root)
 		row := treeRow{id: root.ID, root: true, label: rootName}
-		if fold && !a.expandedState(root.ID, children) {
+		folded := false
+		if query != "" {
+			included := matchesQuery(*root, rootName, query)
+			for _, child := range children {
+				if included {
+					break
+				}
+				included = a.subtreeHasMatch(child, query, map[model.ID]bool{})
+			}
+			folded = !included
+		} else {
+			folded = fold && !a.expandedState(root.ID, children)
+		}
+		if folded {
 			row.hidden = countDescendants(a.graph, children)
 			rows = append(rows, row)
 			continue
@@ -1100,11 +1173,41 @@ func (a app) buildTreeRows(fold bool) []treeRow {
 		path := map[model.ID]bool{root.ID: true}
 		rendered := map[model.ID]bool{root.ID: true}
 		ancestors := []string{rootName}
-		for index, child := range children {
-			a.appendTree(&rows, child, root.ID, "", index == len(children)-1, path, rendered, ancestors, fold)
+		visible := a.includedChildren(children, query)
+		for index, child := range visible {
+			a.appendTree(&rows, child, root.ID, "", index == len(visible)-1, path, rendered, ancestors, fold, query)
 		}
 	}
 	return rows
+}
+
+// matchesQuery reports whether one object matches the filter: its contextual
+// label, full display name, or raw ID, case-insensitively.
+func matchesQuery(component model.Component, label, query string) bool {
+	query = strings.ToLower(query)
+	return strings.Contains(strings.ToLower(label), query) ||
+		strings.Contains(strings.ToLower(displayName(component)), query) ||
+		strings.Contains(strings.ToLower(string(component.ID)), query)
+}
+
+func (a app) subtreeHasMatch(id model.ID, query string, seen map[model.ID]bool) bool {
+	if seen[id] {
+		return false
+	}
+	seen[id] = true
+	component, ok := a.graph.Lookup(id)
+	if !ok {
+		return false
+	}
+	if matchesQuery(*component, "", query) {
+		return true
+	}
+	for _, child := range component.Children {
+		if a.subtreeHasMatch(child, query, seen) {
+			return true
+		}
+	}
+	return false
 }
 
 // implementationChildren is the root's effective child list: declared children
@@ -1192,12 +1295,15 @@ func markDescendants(graph *model.Graph, id model.ID, seen map[model.ID]bool) {
 	}
 }
 
-func (a app) appendTree(rows *[]treeRow, id, parent model.ID, parentPrefix string, last bool, path, rendered map[model.ID]bool, ancestors []string, fold bool) {
+func (a app) appendTree(rows *[]treeRow, id, parent model.ID, parentPrefix string, last bool, path, rendered map[model.ID]bool, ancestors []string, fold bool, query string) {
 	if path[id] || rendered[id] {
 		return
 	}
 	component, ok := a.graph.Lookup(id)
 	if !ok {
+		return
+	}
+	if query != "" && !a.subtreeHasMatch(id, query, map[model.ID]bool{}) {
 		return
 	}
 	connector := "├─ "
@@ -1208,7 +1314,7 @@ func (a app) appendTree(rows *[]treeRow, id, parent model.ID, parentPrefix strin
 	}
 	name := displayName(*component)
 	row := treeRow{id: id, prefix: parentPrefix + connector, label: contextualName(name, ancestors), parent: parent}
-	if fold && len(component.Children) > 0 && !a.expandedState(id, component.Children) {
+	if query == "" && fold && len(component.Children) > 0 && !a.expandedState(id, component.Children) {
 		row.hidden = countDescendants(a.graph, component.Children)
 		*rows = append(*rows, row)
 		rendered[id] = true
@@ -1219,9 +1325,25 @@ func (a app) appendTree(rows *[]treeRow, id, parent model.ID, parentPrefix strin
 	nextPath := clonePath(path)
 	nextPath[id] = true
 	nextAncestors := append(append([]string(nil), ancestors...), name)
-	for index, child := range component.Children {
-		a.appendTree(rows, child, id, nextPrefix, index == len(component.Children)-1, nextPath, rendered, nextAncestors, fold)
+	children := a.includedChildren(component.Children, query)
+	for index, child := range children {
+		a.appendTree(rows, child, id, nextPrefix, index == len(children)-1, nextPath, rendered, nextAncestors, fold, query)
 	}
+}
+
+// includedChildren keeps the tree connectors honest under filtering: the last
+// visible child must draw the closing corner, not a pruned sibling.
+func (a app) includedChildren(children []model.ID, query string) []model.ID {
+	if query == "" {
+		return children
+	}
+	included := make([]model.ID, 0, len(children))
+	for _, child := range children {
+		if a.subtreeHasMatch(child, query, map[model.ID]bool{}) {
+			included = append(included, child)
+		}
+	}
+	return included
 }
 
 func (a app) childRows(id model.ID) []treeRow {
@@ -1234,7 +1356,7 @@ func (a app) childRows(id model.ID) []treeRow {
 	rendered := map[model.ID]bool{id: true}
 	ancestors := []string{displayName(*component)}
 	for index, child := range component.Children {
-		a.appendTree(&rows, child, id, "", index == len(component.Children)-1, path, rendered, ancestors, false)
+		a.appendTree(&rows, child, id, "", index == len(component.Children)-1, path, rendered, ancestors, false, "")
 	}
 	return rows
 }
@@ -1274,12 +1396,14 @@ func (a app) renderTreeRow(row treeRow, component model.Component, width int, s 
 	if s.noColor {
 		return indicator + row.prefix + glyph + " " + name + foldMark + strings.Repeat(" ", padding) + statusWord
 	}
+	query := a.filterQuery()
 	if selected {
 		raised := lipgloss.NewStyle().Background(s.colors.panelHigh)
+		match := raised.Foreground(s.colors.accent).Bold(true)
 		return s.selectedBar.Render("▌ ") +
 			raised.Foreground(s.colors.faint).Render(row.prefix) +
 			raised.Foreground(healthColor(component.Health.Status, s.colors)).Render(glyph) +
-			s.selected.Render(" "+name) +
+			s.selected.Render(" ") + renderNameWithMatch(name, query, s.selected, match) +
 			raised.Foreground(s.colors.faint).Render(foldMark) +
 			raised.Render(strings.Repeat(" ", padding)) +
 			raised.Foreground(healthColor(component.Health.Status, s.colors)).Render(statusWord)
@@ -1288,12 +1412,27 @@ func (a app) renderTreeRow(row treeRow, component model.Component, width int, s 
 	if row.root {
 		nameStyle = s.title
 	}
+	match := lipgloss.NewStyle().Foreground(s.colors.accent).Bold(true)
 	return indicator + s.faint.Render(row.prefix) +
 		healthStyle(component.Health.Status, s).Render(glyph) +
-		nameStyle.Render(" "+name) +
+		" " + renderNameWithMatch(name, query, nameStyle, match) +
 		s.faint.Render(foldMark) +
 		strings.Repeat(" ", padding) +
 		healthStyle(component.Health.Status, s).Render(statusWord)
+}
+
+// renderNameWithMatch highlights the matched substring so the eye lands on
+// why a row is in the filtered view.
+func renderNameWithMatch(name, query string, base, match lipgloss.Style) string {
+	if query == "" {
+		return base.Render(name)
+	}
+	index := strings.Index(strings.ToLower(name), strings.ToLower(query))
+	if index < 0 {
+		return base.Render(name)
+	}
+	end := index + len(query)
+	return base.Render(name[:index]) + match.Render(name[index:end]) + base.Render(name[end:])
 }
 
 // systemdUnitSuffixes mark ID tails that are operational identifiers — the

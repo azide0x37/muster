@@ -125,6 +125,56 @@ func TestSidebarRendersCardsAndStrips(t *testing.T) {
 	)
 }
 
+func TestFilterNarrowsCardsAndKeepsLineage(t *testing.T) {
+	a := newApp(fixtureGraph(t), Options{Hostname: "shed-pi-01", NoColor: true})
+	a.width, a.height = 118, 34
+
+	updatedModel, _ := a.handleKey("/")
+	a = updatedModel.(app)
+	if !a.filterEditing {
+		t.Fatal("/ did not focus the filter input")
+	}
+	a.filter.SetValue("sample")
+	a.selectFirstMatch()
+
+	if a.selected != "component:weather.timer" {
+		t.Fatalf("selection = %q, want the first matching object", a.selected)
+	}
+	if count := a.filterMatchCount(); count != 1 {
+		t.Fatalf("match count = %d, want 1", count)
+	}
+	visible := map[model.ID]bool{}
+	for _, row := range a.treeRows() {
+		visible[row.id] = true
+	}
+	if !visible["implementation:weather-station"] || !visible["component:weather.timer"] {
+		t.Fatal("matching object or its lineage is missing from the filtered view")
+	}
+	if visible["component:pattern.conveyor"] {
+		t.Fatal("non-matching subtree survived the filter")
+	}
+
+	a.filterEditing = false
+	output := a.render()
+	assertContains(t, output,
+		"/ sample",
+		"1 match",
+		"Sample Timer",
+		"0.4.0 · 1 of 2 shown",
+		"§ FILTER",
+		"1 of 7 objects match “sample”",
+	)
+	if strings.Contains(output, "Device-triggered Conveyor") {
+		t.Fatal("filtered-out card still shows its rows")
+	}
+
+	updatedModel, _ = a.handleKey("esc")
+	a = updatedModel.(app)
+	if a.filterQuery() != "" {
+		t.Fatal("esc did not clear the applied filter")
+	}
+}
+
 func TestInspectOmitsUndeclaredSections(t *testing.T) {
 	graph := fixtureGraph(t)
 	output := Render(graph, RenderOptions{

@@ -14,7 +14,9 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/harmonica"
 
@@ -114,6 +116,10 @@ type app struct {
 	// expanded holds explicit fold toggles by object ID. Nodes without an
 	// entry fold by default when their whole subtree is healthy.
 	expanded map[model.ID]bool
+	// filter narrows the sidebar to matching objects and their lineage.
+	// filterEditing routes keys into the input instead of navigation.
+	filter        textinput.Model
+	filterEditing bool
 	// refreshedAt is when the graph now on screen was produced. It stays zero
 	// in deterministic renders so snapshots never embed a wall clock.
 	refreshedAt time.Time
@@ -152,27 +158,57 @@ func newApp(graph *model.Graph, opts Options) app {
 		spin:         spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(spinnerStyle(true, opts.NoColor))),
 		reduceMotion: os.Getenv(reduceMotionEnv) != "",
 	}
+	result.filter = textinput.New()
+	result.filter.Placeholder = "filter"
+	result.filter.Prompt = " / "
+	result.syncFilterStyles()
 	result.ensureSelection()
 	return result
+}
+
+// filterQuery is the live filter text; blank means no filtering.
+func (a app) filterQuery() string {
+	return strings.TrimSpace(a.filter.Value())
+}
+
+func (a *app) syncFilterStyles() {
+	styles := textinput.Styles{}
+	if !a.noColor {
+		colors := newPalette(a.dark, false)
+		state := textinput.StyleState{
+			Text:        lipgloss.NewStyle().Foreground(colors.fg),
+			Placeholder: lipgloss.NewStyle().Foreground(colors.faint),
+			Prompt:      lipgloss.NewStyle().Bold(true).Foreground(colors.accent),
+		}
+		styles.Focused = state
+		styles.Blurred = state
+		styles.Cursor.Color = colors.accent
+	}
+	styles.Cursor.Blink = !a.reduceMotion && !a.noColor
+	a.filter.SetStyles(styles)
 }
 
 // keymap names every key the console understands; the ribbon renders the
 // subset that applies to the moment.
 type keymap struct {
-	move      key.Binding
-	scroll    key.Binding
-	inspect   key.Binding
-	fold      key.Binding
-	unfold    key.Binding
-	back      key.Binding
-	pane      key.Binding
-	doctor    key.Binding
-	refresh   key.Binding
-	help      key.Binding
-	closeHelp key.Binding
-	quit      key.Binding
-	yes       key.Binding
-	no        key.Binding
+	move        key.Binding
+	scroll      key.Binding
+	inspect     key.Binding
+	fold        key.Binding
+	unfold      key.Binding
+	back        key.Binding
+	pane        key.Binding
+	doctor      key.Binding
+	refresh     key.Binding
+	help        key.Binding
+	closeHelp   key.Binding
+	quit        key.Binding
+	yes         key.Binding
+	no          key.Binding
+	filter      key.Binding
+	applyFilter key.Binding
+	clearFilter key.Binding
+	matchMove   key.Binding
 }
 
 func newKeymap() keymap {
@@ -189,8 +225,12 @@ func newKeymap() keymap {
 		help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		closeHelp: key.NewBinding(key.WithKeys("?", "esc"), key.WithHelp("?/esc", "close help")),
 		quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
-		yes:       key.NewBinding(key.WithKeys("y", "enter"), key.WithHelp("y/enter", "confirm doctor")),
-		no:        key.NewBinding(key.WithKeys("n", "esc"), key.WithHelp("n/esc", "cancel")),
+		yes:         key.NewBinding(key.WithKeys("y", "enter"), key.WithHelp("y/enter", "confirm doctor")),
+		no:          key.NewBinding(key.WithKeys("n", "esc"), key.WithHelp("n/esc", "cancel")),
+		filter:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
+		applyFilter: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "apply")),
+		clearFilter: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear filter")),
+		matchMove:   key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑↓", "move")),
 	}
 }
 
@@ -202,12 +242,20 @@ func (a app) ribbonBindings() []key.Binding {
 	if a.help {
 		return []key.Binding{k.closeHelp, k.quit}
 	}
+	if a.filterEditing {
+		return []key.Binding{k.matchMove, k.applyFilter, k.clearFilter}
+	}
 	var bindings []key.Binding
 	if a.inspect != "" {
 		bindings = []key.Binding{k.scroll, k.back}
 	} else {
 		bindings = []key.Binding{k.move, k.inspect}
-		if a.focus == focusTree && a.selected != "" {
+		if a.filterQuery() != "" {
+			bindings = append(bindings, k.clearFilter)
+		} else {
+			bindings = append(bindings, k.filter)
+		}
+		if a.focus == focusTree && a.selected != "" && a.filterQuery() == "" {
 			if children := a.nodeChildren(a.selected); len(children) > 0 {
 				if a.expandedState(a.selected, children) {
 					bindings = append(bindings, k.fold)
@@ -315,10 +363,12 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.BackgroundColorMsg:
 		a.dark = message.IsDark()
 		a.spin.Style = spinnerStyle(a.dark, a.noColor)
+		a.syncFilterStyles()
 		return a, nil
 	case tea.ColorProfileMsg:
 		a.noColor = a.forceNoColor || message.Profile <= colorprofile.ASCII
 		a.spin.Style = spinnerStyle(a.dark, a.noColor)
+		a.syncFilterStyles()
 		return a, nil
 	case ledTickMsg:
 		a.ledDim = !a.ledDim
@@ -400,9 +450,59 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 	case tea.KeyPressMsg:
+		if a.filterEditing {
+			return a.handleFilterKey(message)
+		}
 		return a.handleKey(message.String())
 	}
 	return a, nil
+}
+
+// handleFilterKey routes keys while the filter input is focused: navigation
+// and mode keys are handled here, everything else edits the query.
+func (a app) handleFilterKey(message tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch message.String() {
+	case "ctrl+c":
+		return a, tea.Quit
+	case "esc", "escape":
+		a.filter.SetValue("")
+		a.filter.Blur()
+		a.filterEditing = false
+		a.ensureSelection()
+		return a, nil
+	case "enter", "tab":
+		a.filter.Blur()
+		a.filterEditing = false
+		return a, nil
+	case "up":
+		a.moveSelection(-1)
+		return a, nil
+	case "down":
+		a.moveSelection(1)
+		return a, nil
+	default:
+		var command tea.Cmd
+		a.filter, command = a.filter.Update(message)
+		a.selectFirstMatch()
+		return a, command
+	}
+}
+
+// selectFirstMatch lands the selection on the first object that itself
+// matches the query, not merely a lineage row kept for context.
+func (a *app) selectFirstMatch() {
+	query := a.filterQuery()
+	if query == "" {
+		a.ensureSelection()
+		return
+	}
+	for _, row := range a.treeRows() {
+		if component, ok := a.graph.Lookup(row.id); ok && matchesQuery(*component, row.label, query) {
+			a.selected = row.id
+			return
+		}
+	}
+	a.ensureSelection()
 }
 
 func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
@@ -458,6 +558,15 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 			a.focus = focusTree
 			a.scroll = 0
 			a.snapScroll()
+		} else if a.filterQuery() != "" {
+			a.filter.SetValue("")
+			a.ensureSelection()
+		}
+		return a, nil
+	case "/":
+		if a.inspect == "" && a.focus == focusTree {
+			a.filterEditing = true
+			return a, a.filter.Focus()
 		}
 		return a, nil
 	case "left", "h":
