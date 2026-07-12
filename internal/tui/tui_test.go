@@ -34,14 +34,23 @@ func TestRenderWideBrowserIsDeterministicAndLiterate(t *testing.T) {
 	assertContains(t, first,
 		"Muster implementations on shed-pi-01",
 		"2 implementations · 1 healthy · 1 degraded",
-		"Implementations · 7 objects",
+		"/ filter",
+		"7 objects",
 		"Media Gateway",
+		"1.2.3",
 		"Device-triggered Conveyor",
+		"Weather Station · 2 objects · 0.4.0",
 		"Selected object",
-		"WHAT",
-		"WHY",
+		"HEALTH CAUSES",
+		"LATEST EVIDENCE",
 		"enter inspect",
 	)
+	if strings.Contains(first, "Sample Timer") {
+		t.Fatal("fully healthy subtree was not folded by default")
+	}
+	if strings.Contains(first, "HEALTHY") {
+		t.Fatal("healthy objects spelled out a status word; healthy rows must stay quiet")
+	}
 	if strings.Contains(first, "\x1b[") {
 		t.Fatal("NoColor render unexpectedly contains ANSI escapes")
 	}
@@ -66,7 +75,7 @@ func TestRenderInspectorShowsCompleteGenericObject(t *testing.T) {
 	})
 
 	assertContains(t, output,
-		"Inspect · pattern · component:pattern.conveyor",
+		"pattern · component:pattern.conveyor",
 		"WHAT",
 		"Turns device readiness into bounded work and an atomic publication.",
 		"WHY",
@@ -85,13 +94,159 @@ func TestRenderInspectorShowsCompleteGenericObject(t *testing.T) {
 		"DEPENDENCY EXPLANATION",
 		"Needs Archive Mount via Device-triggered Conveyor → Archive Mount",
 		"METADATA",
-		"pattern: T2R4.device-triggered-conveyor",
+		"T2R4.device-triggered-conveyor",
 		"ACTIONS",
 		"[d] Run doctor · doctor.run",
 		"OBSERVATIONS",
 		"DOCTOR · 2026-07-10T12:30:00Z",
-		"● PASS · queue",
+		"STATUS",
+		"CHECK",
+		"EVIDENCE",
+		"● PASS",
+		"hot queue writable",
+		"path: /mnt/archive",
 		"Artifact: /run/muster/media-gateway/doctor.json",
+	)
+}
+
+func TestInspectChecksTableFocusAndCursor(t *testing.T) {
+	a := newApp(fixtureGraph(t), Options{Hostname: "shed-pi-01", NoColor: true})
+	a.width, a.height = 110, 80
+	a.selected = "component:pattern.conveyor"
+	a.inspect = a.selected
+
+	if count := a.inspectChecksCount(); count != 3 {
+		t.Fatalf("checks row count = %d, want 3 (two checks plus one evidence row)", count)
+	}
+	updatedModel, _ := a.handleKey("tab")
+	a = updatedModel.(app)
+	if !a.tableFocused {
+		t.Fatal("tab did not focus the checks table")
+	}
+	updatedModel, _ = a.handleKey("j")
+	a = updatedModel.(app)
+	if a.tableCursor != 1 || a.scroll != 0 {
+		t.Fatalf("j moved cursor to %d (scroll %d), want row 1 with no pane scroll", a.tableCursor, a.scroll)
+	}
+	cursorRow := ""
+	for _, line := range strings.Split(a.render(), "\n") {
+		if strings.Contains(line, "▌") {
+			cursorRow = line
+		}
+	}
+	if !strings.Contains(cursorRow, "◐ WARN") || !strings.Contains(cursorRow, "archive") {
+		t.Fatalf("cursor bar is not on the archive check row: %q", cursorRow)
+	}
+	updatedModel, _ = a.handleKey("esc")
+	a = updatedModel.(app)
+	if a.tableFocused || a.inspect == "" {
+		t.Fatal("esc should leave the table but stay in the inspect view")
+	}
+}
+
+func TestSidebarRendersCardsAndStrips(t *testing.T) {
+	graph := fixtureGraph(t)
+	base := RenderOptions{Hostname: "shed-pi-01", Width: 118, Height: 34, NoColor: true}
+
+	strip := base
+	strip.Selected = "implementation:weather-station"
+	output := Render(graph, strip)
+	assertContains(t, output,
+		"▌▸ ● Weather Station · 2 objects · 0.4.0",
+		"─ ◐ Media Gateway",
+	)
+
+	header := base
+	header.Selected = "implementation:media-gateway"
+	output = Render(graph, header)
+	assertContains(t, output,
+		"╔▌ ◐ Media Gateway",
+		" ▸ ● Weather Station · 2 objects · 0.4.0",
+	)
+}
+
+func TestFilterNarrowsCardsAndKeepsLineage(t *testing.T) {
+	a := newApp(fixtureGraph(t), Options{Hostname: "shed-pi-01", NoColor: true})
+	a.width, a.height = 118, 34
+
+	updatedModel, _ := a.handleKey("/")
+	a = updatedModel.(app)
+	if !a.filterEditing {
+		t.Fatal("/ did not focus the filter input")
+	}
+	a.filter.SetValue("sample")
+	a.selectFirstMatch()
+
+	if a.selected != "component:weather.timer" {
+		t.Fatalf("selection = %q, want the first matching object", a.selected)
+	}
+	if count := a.filterMatchCount(); count != 1 {
+		t.Fatalf("match count = %d, want 1", count)
+	}
+	visible := map[model.ID]bool{}
+	for _, row := range a.treeRows() {
+		visible[row.id] = true
+	}
+	if !visible["implementation:weather-station"] || !visible["component:weather.timer"] {
+		t.Fatal("matching object or its lineage is missing from the filtered view")
+	}
+	if visible["component:pattern.conveyor"] {
+		t.Fatal("non-matching subtree survived the filter")
+	}
+
+	a.filterEditing = false
+	output := a.render()
+	assertContains(t, output,
+		"/ sample",
+		"1 match",
+		"Sample Timer",
+		"0.4.0 · 1 of 2 shown",
+		"§ FILTER",
+		"1 of 7 objects match “sample”",
+	)
+	if strings.Contains(output, "Device-triggered Conveyor") {
+		t.Fatal("filtered-out card still shows its rows")
+	}
+
+	updatedModel, _ = a.handleKey("esc")
+	a = updatedModel.(app)
+	if a.filterQuery() != "" {
+		t.Fatal("esc did not clear the applied filter")
+	}
+}
+
+func TestInspectOmitsUndeclaredSections(t *testing.T) {
+	graph := fixtureGraph(t)
+	output := Render(graph, RenderOptions{
+		Hostname: "shed-pi-01", Width: 110, Height: 60, NoColor: true,
+		Selected: "component:weather.publisher",
+		Inspect:  "component:weather.publisher",
+	})
+
+	for _, placeholder := range []string{
+		"Not declared.",
+		"No responsibilities declared.",
+		"No failure modes declared.",
+		"No child components.",
+		"No direct graph relations.",
+		"No transitive dependency paths.",
+		"No metadata.",
+		"No actions advertised.",
+	} {
+		if strings.Contains(output, placeholder) {
+			t.Errorf("inspect rendered placeholder %q for undeclared content", placeholder)
+		}
+	}
+	for _, section := range []string{"WHAT", "WHY", "RESPONSIBILITIES", "FAILURE MODES", "RELATIONS", "ACTIONS"} {
+		if strings.Contains(output, section) {
+			t.Errorf("inspect rendered section %q for undeclared content", section)
+		}
+	}
+	assertContains(t, output,
+		"Weather Publisher",
+		"HEALTH EXPLANATION",
+		"OBSERVATIONS",
+		"No recorded observations.",
 	)
 }
 
@@ -105,7 +260,7 @@ func TestNarrowLayoutUsesOnePaneAndNeverOverflows(t *testing.T) {
 
 	assertContains(t, output,
 		"Muster implementations on edge-box",
-		"Implementations · 7 objects",
+		"7 objects",
 		"Device-triggered Conveyor",
 	)
 	if strings.Contains(output, "Selected object") {
@@ -363,11 +518,14 @@ func TestNoColorUsesVisibleFocusBorderAndHonorsDetectedProfile(t *testing.T) {
 func dagFixture(t *testing.T) *model.Graph {
 	t.Helper()
 	health := model.Health{Status: model.HealthHealthy, Summary: "ready"}
+	// The shared node is degraded so every path to it unfolds by default and
+	// the whole DAG is visible without operator toggles.
+	shared := model.Health{Status: model.HealthDegraded, Summary: "flaky"}
 	components := []model.Component{
 		{ID: "implementation:dag", Kind: "implementation", Health: health, Children: []model.ID{"component:dag:a", "component:dag:b"}},
 		{ID: "component:dag:a", Kind: "component.group", Health: health, Children: []model.ID{"component:dag:shared"}},
 		{ID: "component:dag:b", Kind: "component.group", Health: health, Children: []model.ID{"component:dag:shared"}},
-		{ID: "component:dag:shared", Kind: "systemd.service", Health: health},
+		{ID: "component:dag:shared", Kind: "systemd.service", Health: shared},
 	}
 	graph, err := model.NewGraph([]model.Implementation{{
 		ID:         "implementation:dag",
@@ -478,6 +636,180 @@ func fixtureGraph(t *testing.T) *model.Graph {
 		t.Fatalf("NewGraph: %v", err)
 	}
 	return graph
+}
+
+func TestOverviewLeadsWithEvidenceAndDemotesLiterateProse(t *testing.T) {
+	a := newApp(fixtureGraph(t), Options{Hostname: "shed-pi-01", NoColor: true})
+	lines := strings.Join(a.overviewLines("component:pattern.conveyor", 80, newStyles(true, true)), "\n")
+	causes := strings.Index(lines, "HEALTH CAUSES")
+	evidence := strings.Index(lines, "LATEST EVIDENCE")
+	what := strings.Index(lines, "WHAT")
+	why := strings.Index(lines, "WHY")
+	if causes < 0 || evidence < 0 || what < 0 || why < 0 {
+		t.Fatalf("overview is missing a section: causes=%d evidence=%d what=%d why=%d\n%s", causes, evidence, what, why, lines)
+	}
+	if !(causes < evidence && evidence < what && what < why) {
+		t.Fatalf("overview order is not evidence-first: causes=%d evidence=%d what=%d why=%d", causes, evidence, what, why)
+	}
+	if strings.Contains(lines, "literate") {
+		t.Fatalf("overview still speaks internal vocabulary:\n%s", lines)
+	}
+}
+
+func TestHealthySubtreesFoldAndToggleOpen(t *testing.T) {
+	a := newApp(fixtureGraph(t), Options{Hostname: "shed-pi-01"})
+
+	visible := func() map[model.ID]bool {
+		ids := map[model.ID]bool{}
+		for _, row := range a.treeRows() {
+			ids[row.id] = true
+		}
+		return ids
+	}
+
+	rows := visible()
+	if !rows["component:pattern.conveyor"] || !rows["component:archive"] {
+		t.Fatal("path to the degraded archive is not open by default")
+	}
+	if rows["component:weather.timer"] {
+		t.Fatal("fully healthy weather-station subtree is not folded by default")
+	}
+	for _, row := range a.treeRows() {
+		if row.id == "implementation:weather-station" && row.hidden != 2 {
+			t.Fatalf("folded weather-station hides %d objects, want 2", row.hidden)
+		}
+	}
+
+	a.selected = "implementation:weather-station"
+	updatedModel, _ := a.handleKey("space")
+	a = updatedModel.(app)
+	if !visible()["component:weather.timer"] {
+		t.Fatal("space did not unfold the selected subtree")
+	}
+	updatedModel, _ = a.handleKey("h")
+	a = updatedModel.(app)
+	if visible()["component:weather.timer"] {
+		t.Fatal("h did not fold the open subtree")
+	}
+
+	a.selected = "component:capture"
+	updatedModel, _ = a.handleKey("h")
+	a = updatedModel.(app)
+	if a.selected != "component:pattern.conveyor" {
+		t.Fatalf("h on a leaf selected %q, want its parent", a.selected)
+	}
+
+	updatedModel, _ = a.handleKey("h")
+	a = updatedModel.(app)
+	if a.expandedState("component:pattern.conveyor", a.nodeChildren("component:pattern.conveyor")) {
+		t.Fatal("h did not fold the open conveyor subtree")
+	}
+	updatedModel, command := a.handleKey("l")
+	a = updatedModel.(app)
+	if command != nil || a.inspect != "" || !a.expandedState("component:pattern.conveyor", a.nodeChildren("component:pattern.conveyor")) {
+		t.Fatal("l on a folded node did not unfold it")
+	}
+	updatedModel, command = a.handleKey("l")
+	a = updatedModel.(app)
+	if a.inspect != "component:pattern.conveyor" || command == nil {
+		t.Fatal("l on an open node did not inspect it")
+	}
+}
+
+func TestFoldedSelectionFallsBackToVisibleAncestor(t *testing.T) {
+	a := newApp(fixtureGraph(t), Options{Hostname: "shed-pi-01"})
+	a.selected = "implementation:weather-station"
+	updatedModel, _ := a.handleKey("space")
+	a = updatedModel.(app)
+	a.selected = "component:weather.timer"
+
+	a.expanded = map[model.ID]bool{}
+	a.ensureSelection()
+	if a.selected != "implementation:weather-station" {
+		t.Fatalf("selection after folding = %q, want nearest visible ancestor", a.selected)
+	}
+}
+
+func TestContextualNamesDropLineageAndKeepUnitIdentifiers(t *testing.T) {
+	health := model.Health{Status: model.HealthHealthy}
+	broken := model.Health{Status: model.HealthUnhealthy, Summary: "activation failed"}
+	components := []model.Component{
+		{
+			ID: "implementation:bt-audio-gateway", Kind: "implementation", Health: broken,
+			Metadata: model.Metadata{"project": "Bt Audio Gateway"},
+			Children: []model.ID{"component:bt-audio-gateway:services"},
+		},
+		{
+			ID: "component:bt-audio-gateway:services", Kind: "component.group", Health: broken,
+			Children: []model.ID{"component:bt-audio-gateway:unit:snapclient-bt@.service"},
+		},
+		{ID: "component:bt-audio-gateway:unit:snapclient-bt@.service", Kind: "systemd.service", Health: broken},
+	}
+	graph, err := model.NewGraph([]model.Implementation{{
+		ID: "implementation:bt-audio-gateway",
+		Components: []model.ID{
+			"implementation:bt-audio-gateway",
+			"component:bt-audio-gateway:services",
+			"component:bt-audio-gateway:unit:snapclient-bt@.service",
+		},
+	}}, components, nil, nil)
+	if err != nil {
+		t.Fatalf("NewGraph: %v", err)
+	}
+	_ = health
+
+	a := newApp(graph, Options{Hostname: "euterpe"})
+	labels := map[model.ID]string{}
+	for _, row := range a.treeRows() {
+		labels[row.id] = row.label
+	}
+	want := map[model.ID]string{
+		"implementation:bt-audio-gateway":                        "Bt Audio Gateway",
+		"component:bt-audio-gateway:services":                    "Services",
+		"component:bt-audio-gateway:unit:snapclient-bt@.service": "snapclient-bt@.service",
+	}
+	for id, expected := range want {
+		if labels[id] != expected {
+			t.Errorf("label for %s = %q, want %q", id, labels[id], expected)
+		}
+	}
+}
+
+func TestDetailPanesScrollWithViewportAndScrollbar(t *testing.T) {
+	graph := fixtureGraph(t)
+	output := Render(graph, RenderOptions{
+		Hostname: "shed-pi-01", Width: 110, Height: 24, NoColor: true,
+		Selected: "component:pattern.conveyor",
+		Inspect:  "component:pattern.conveyor",
+	})
+	if !strings.Contains(output, "┃") || !strings.Contains(output, "╎") {
+		t.Fatal("overflowing inspect pane did not render a scrollbar")
+	}
+	if strings.Contains(output, "more line") {
+		t.Fatal("scrollbar should replace the more-lines hint in detail panes")
+	}
+
+	a := newApp(graph, Options{Hostname: "shed-pi-01", NoColor: true})
+	a.width, a.height = 110, 24
+	a.selected = "component:pattern.conveyor"
+	a.inspect = a.selected
+	page := a.detailViewportHeight()
+
+	updatedModel, _ := a.handleKey("pgdown")
+	a = updatedModel.(app)
+	if a.scroll != page {
+		t.Fatalf("pgdown scrolled to %d, want one page (%d)", a.scroll, page)
+	}
+	updatedModel, _ = a.handleKey("G")
+	a = updatedModel.(app)
+	if a.scroll != a.scrollLimit() {
+		t.Fatalf("G scrolled to %d, want bottom (%d)", a.scroll, a.scrollLimit())
+	}
+	updatedModel, _ = a.handleKey("g")
+	a = updatedModel.(app)
+	if a.scroll != 0 {
+		t.Fatalf("g scrolled to %d, want top", a.scroll)
+	}
 }
 
 func TestMotionSpringSettlesAndHonorsReducedMotion(t *testing.T) {

@@ -14,7 +14,9 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/harmonica"
 
@@ -62,7 +64,9 @@ func Run(graph *model.Graph, opts Options) error {
 	if err := graph.Validate(); err != nil {
 		return fmt.Errorf("tui: invalid graph: %w", err)
 	}
-	_, err := tea.NewProgram(newApp(graph, opts)).Run()
+	app := newApp(graph, opts)
+	app.refreshedAt = time.Now()
+	_, err := tea.NewProgram(app).Run()
 	return err
 }
 
@@ -109,6 +113,21 @@ type app struct {
 	confirmAction model.ID
 	confirmTarget model.ID
 
+	// expanded holds explicit fold toggles by object ID. Nodes without an
+	// entry fold by default when their whole subtree is healthy.
+	expanded map[model.ID]bool
+	// filter narrows the sidebar to matching objects and their lineage.
+	// filterEditing routes keys into the input instead of navigation.
+	filter        textinput.Model
+	filterEditing bool
+	// tableFocused hands j/k to the latest observation's checks table in the
+	// inspect view; tableCursor is the row the bar sits on.
+	tableFocused bool
+	tableCursor  int
+	// refreshedAt is when the graph now on screen was produced. It stays zero
+	// in deterministic renders so snapshots never embed a wall clock.
+	refreshedAt time.Time
+
 	// Motion state. scroll is always the destination; scrollPos is where the
 	// eye currently is. The deterministic Render path never animates, so the
 	// two only diverge inside a live program.
@@ -138,45 +157,90 @@ func newApp(graph *model.Graph, opts Options) app {
 		dark:         true,
 		noColor:      opts.NoColor,
 		forceNoColor: opts.NoColor,
+		expanded:     map[model.ID]bool{},
 		keys:         newKeymap(),
 		spin:         spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(spinnerStyle(true, opts.NoColor))),
 		reduceMotion: os.Getenv(reduceMotionEnv) != "",
 	}
+	result.filter = textinput.New()
+	result.filter.Placeholder = "filter"
+	result.filter.Prompt = " / "
+	result.syncFilterStyles()
 	result.ensureSelection()
 	return result
+}
+
+// filterQuery is the live filter text; blank means no filtering.
+func (a app) filterQuery() string {
+	return strings.TrimSpace(a.filter.Value())
+}
+
+func (a *app) syncFilterStyles() {
+	styles := textinput.Styles{}
+	if !a.noColor {
+		colors := newPalette(a.dark, false)
+		state := textinput.StyleState{
+			Text:        lipgloss.NewStyle().Foreground(colors.fg),
+			Placeholder: lipgloss.NewStyle().Foreground(colors.faint),
+			Prompt:      lipgloss.NewStyle().Bold(true).Foreground(colors.accent),
+		}
+		styles.Focused = state
+		styles.Blurred = state
+		styles.Cursor.Color = colors.accent
+	}
+	styles.Cursor.Blink = !a.reduceMotion && !a.noColor
+	a.filter.SetStyles(styles)
 }
 
 // keymap names every key the console understands; the ribbon renders the
 // subset that applies to the moment.
 type keymap struct {
-	move      key.Binding
-	scroll    key.Binding
-	inspect   key.Binding
-	back      key.Binding
-	pane      key.Binding
-	doctor    key.Binding
-	refresh   key.Binding
-	help      key.Binding
-	closeHelp key.Binding
-	quit      key.Binding
-	yes       key.Binding
-	no        key.Binding
+	move        key.Binding
+	scroll      key.Binding
+	inspect     key.Binding
+	fold        key.Binding
+	unfold      key.Binding
+	back        key.Binding
+	pane        key.Binding
+	doctor      key.Binding
+	refresh     key.Binding
+	help        key.Binding
+	closeHelp   key.Binding
+	quit        key.Binding
+	yes         key.Binding
+	no          key.Binding
+	filter      key.Binding
+	applyFilter key.Binding
+	clearFilter key.Binding
+	matchMove   key.Binding
+	table       key.Binding
+	tableRow    key.Binding
+	tableBack   key.Binding
 }
 
 func newKeymap() keymap {
 	return keymap{
-		move:      key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "move")),
-		scroll:    key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "scroll")),
-		inspect:   key.NewBinding(key.WithKeys("enter", "right", "l"), key.WithHelp("enter", "inspect")),
-		back:      key.NewBinding(key.WithKeys("esc", "backspace", "left", "h"), key.WithHelp("esc", "back")),
-		pane:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "pane")),
-		doctor:    key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
-		refresh:   key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
-		help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
-		closeHelp: key.NewBinding(key.WithKeys("?", "esc"), key.WithHelp("?/esc", "close help")),
-		quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
-		yes:       key.NewBinding(key.WithKeys("y", "enter"), key.WithHelp("y/enter", "confirm doctor")),
-		no:        key.NewBinding(key.WithKeys("n", "esc"), key.WithHelp("n/esc", "cancel")),
+		move:        key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "move")),
+		scroll:      key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "scroll")),
+		inspect:     key.NewBinding(key.WithKeys("enter", "right", "l"), key.WithHelp("enter", "inspect")),
+		fold:        key.NewBinding(key.WithKeys("space", "h", "left"), key.WithHelp("space", "fold")),
+		unfold:      key.NewBinding(key.WithKeys("space", "l", "right"), key.WithHelp("space", "unfold")),
+		back:        key.NewBinding(key.WithKeys("esc", "backspace", "left", "h"), key.WithHelp("esc", "back")),
+		pane:        key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "pane")),
+		doctor:      key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
+		refresh:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
+		help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		closeHelp:   key.NewBinding(key.WithKeys("?", "esc"), key.WithHelp("?/esc", "close help")),
+		quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		yes:         key.NewBinding(key.WithKeys("y", "enter"), key.WithHelp("y/enter", "confirm doctor")),
+		no:          key.NewBinding(key.WithKeys("n", "esc"), key.WithHelp("n/esc", "cancel")),
+		filter:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
+		applyFilter: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "apply")),
+		clearFilter: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear filter")),
+		matchMove:   key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑↓", "move")),
+		table:       key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "checks")),
+		tableRow:    key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "row")),
+		tableBack:   key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "scroll")),
 	}
 }
 
@@ -188,11 +252,37 @@ func (a app) ribbonBindings() []key.Binding {
 	if a.help {
 		return []key.Binding{k.closeHelp, k.quit}
 	}
+	if a.filterEditing {
+		return []key.Binding{k.matchMove, k.applyFilter, k.clearFilter}
+	}
 	var bindings []key.Binding
 	if a.inspect != "" {
-		bindings = []key.Binding{k.scroll, k.back}
+		if a.tableFocused {
+			bindings = []key.Binding{k.tableRow, k.tableBack, k.back}
+		} else {
+			bindings = []key.Binding{k.scroll}
+			if a.inspectChecksCount() > 0 {
+				bindings = append(bindings, k.table)
+			}
+			bindings = append(bindings, k.back)
+		}
 	} else {
-		bindings = []key.Binding{k.move, k.inspect, k.pane}
+		bindings = []key.Binding{k.move, k.inspect}
+		if a.filterQuery() != "" {
+			bindings = append(bindings, k.clearFilter)
+		} else {
+			bindings = append(bindings, k.filter)
+		}
+		if a.focus == focusTree && a.selected != "" && a.filterQuery() == "" {
+			if children := a.nodeChildren(a.selected); len(children) > 0 {
+				if a.expandedState(a.selected, children) {
+					bindings = append(bindings, k.fold)
+				} else {
+					bindings = append(bindings, k.unfold)
+				}
+			}
+		}
+		bindings = append(bindings, k.pane)
 	}
 	if _, ok := a.doctorAction(a.activeID()); ok && a.opts.RunDoctor != nil {
 		bindings = append(bindings, k.doctor)
@@ -291,10 +381,12 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.BackgroundColorMsg:
 		a.dark = message.IsDark()
 		a.spin.Style = spinnerStyle(a.dark, a.noColor)
+		a.syncFilterStyles()
 		return a, nil
 	case tea.ColorProfileMsg:
 		a.noColor = a.forceNoColor || message.Profile <= colorprofile.ASCII
 		a.spin.Style = spinnerStyle(a.dark, a.noColor)
+		a.syncFilterStyles()
 		return a, nil
 	case ledTickMsg:
 		a.ledDim = !a.ledDim
@@ -338,12 +430,15 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		a.graph = message.graph
+		a.refreshedAt = time.Now()
 		a.ensureSelection()
 		a.scroll = a.clampScroll(a.scroll)
 		if afterDoctor {
 			a.status = previousStatus + " · runtime graph refreshed"
 		} else {
-			a.status = "Runtime graph refreshed"
+			// The status bar's default line shows the new state-as-of time,
+			// which is the whole story of a successful refresh.
+			a.status = ""
 		}
 		return a, nil
 	case doctorDoneMsg:
@@ -360,6 +455,7 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			a.graph = message.graph
+			a.refreshedAt = time.Now()
 			a.ensureSelection()
 			a.scroll = a.clampScroll(a.scroll)
 			a.status += " · runtime graph refreshed"
@@ -371,10 +467,88 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return a, refreshCommand(a.opts.Refresh)
 		}
 		return a, nil
+	case tea.MouseWheelMsg:
+		if a.scrollingPane() {
+			switch message.Button {
+			case tea.MouseWheelUp:
+				return a, a.animateScrollTo(a.scroll - 3)
+			case tea.MouseWheelDown:
+				return a, a.animateScrollTo(a.scroll + 3)
+			}
+		}
+		return a, nil
 	case tea.KeyPressMsg:
+		if a.filterEditing {
+			return a.handleFilterKey(message)
+		}
 		return a.handleKey(message.String())
 	}
 	return a, nil
+}
+
+// scrollingPane reports whether keys should scroll a detail pane rather than
+// move the tree selection.
+func (a app) scrollingPane() bool {
+	return a.inspect != "" || a.focus == focusDetail || a.help
+}
+
+// inspectChecksCount is how many cursor rows the latest observation's checks
+// table has for the inspected object; zero means there is no table to focus.
+func (a app) inspectChecksCount() int {
+	if a.inspect == "" {
+		return 0
+	}
+	if observation, found := a.graph.LatestObservation(a.inspect, ""); found {
+		return checksRowCount(observation.Checks)
+	}
+	return 0
+}
+
+// handleFilterKey routes keys while the filter input is focused: navigation
+// and mode keys are handled here, everything else edits the query.
+func (a app) handleFilterKey(message tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch message.String() {
+	case "ctrl+c":
+		return a, tea.Quit
+	case "esc", "escape":
+		a.filter.SetValue("")
+		a.filter.Blur()
+		a.filterEditing = false
+		a.ensureSelection()
+		return a, nil
+	case "enter", "tab":
+		a.filter.Blur()
+		a.filterEditing = false
+		return a, nil
+	case "up":
+		a.moveSelection(-1)
+		return a, nil
+	case "down":
+		a.moveSelection(1)
+		return a, nil
+	default:
+		var command tea.Cmd
+		a.filter, command = a.filter.Update(message)
+		a.selectFirstMatch()
+		return a, command
+	}
+}
+
+// selectFirstMatch lands the selection on the first object that itself
+// matches the query, not merely a lineage row kept for context.
+func (a *app) selectFirstMatch() {
+	query := a.filterQuery()
+	if query == "" {
+		a.ensureSelection()
+		return
+	}
+	for _, row := range a.treeRows() {
+		if component, ok := a.graph.Lookup(row.id); ok && matchesQuery(*component, row.label, query) {
+			a.selected = row.id
+			return
+		}
+	}
+	a.ensureSelection()
 }
 
 func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
@@ -410,6 +584,18 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 			a.help = false
 			a.scroll = 0
 			a.snapScroll()
+		case "up", "k":
+			return a, a.animateScrollTo(a.scroll - 1)
+		case "down", "j":
+			return a, a.animateScrollTo(a.scroll + 1)
+		case "pgup":
+			return a, a.animateScrollTo(a.scroll - a.detailViewportHeight())
+		case "pgdown":
+			return a, a.animateScrollTo(a.scroll + a.detailViewportHeight())
+		case "g", "home":
+			return a, a.animateScrollTo(0)
+		case "G", "end":
+			return a, a.animateScrollTo(a.scrollLimit())
 		}
 		return a, nil
 	}
@@ -420,7 +606,32 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 		a.scroll = 0
 		a.snapScroll()
 		return a, nil
-	case "esc", "escape", "backspace", "left", "h":
+	case "esc", "escape", "backspace":
+		if a.inspect != "" {
+			if a.tableFocused {
+				a.tableFocused = false
+				return a, nil
+			}
+			a.inspect = ""
+			a.scroll = 0
+			a.snapScroll()
+			a.focus = focusTree
+		} else if a.focus == focusDetail {
+			a.focus = focusTree
+			a.scroll = 0
+			a.snapScroll()
+		} else if a.filterQuery() != "" {
+			a.filter.SetValue("")
+			a.ensureSelection()
+		}
+		return a, nil
+	case "/":
+		if a.inspect == "" && a.focus == focusTree {
+			a.filterEditing = true
+			return a, a.filter.Focus()
+		}
+		return a, nil
+	case "left", "h":
 		if a.inspect != "" {
 			a.inspect = ""
 			a.scroll = 0
@@ -430,35 +641,101 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 			a.focus = focusTree
 			a.scroll = 0
 			a.snapScroll()
+		} else {
+			a.foldOrJumpToParent()
 		}
 		return a, nil
 	case "tab":
-		if a.inspect == "" {
-			if a.focus == focusTree {
-				a.focus = focusDetail
-			} else {
-				a.focus = focusTree
+		if a.inspect != "" {
+			if a.inspectChecksCount() > 0 {
+				a.tableFocused = !a.tableFocused
+				a.tableCursor = clamp(a.tableCursor, 0, a.inspectChecksCount()-1)
 			}
-			a.scroll = 0
-			a.snapScroll()
+			return a, nil
 		}
+		if a.focus == focusTree {
+			a.focus = focusDetail
+		} else {
+			a.focus = focusTree
+		}
+		a.scroll = 0
+		a.snapScroll()
 		return a, nil
 	case "up", "k":
-		if a.inspect != "" || a.focus == focusDetail {
+		if a.inspect != "" && a.tableFocused {
+			a.tableCursor = clamp(a.tableCursor-1, 0, a.inspectChecksCount()-1)
+			return a, nil
+		}
+		if a.scrollingPane() {
 			return a, a.animateScrollTo(a.scroll - 1)
 		}
 		a.moveSelection(-1)
 		return a, nil
 	case "down", "j":
-		if a.inspect != "" || a.focus == focusDetail {
+		if a.inspect != "" && a.tableFocused {
+			a.tableCursor = clamp(a.tableCursor+1, 0, a.inspectChecksCount()-1)
+			return a, nil
+		}
+		if a.scrollingPane() {
 			return a, a.animateScrollTo(a.scroll + 1)
 		}
 		a.moveSelection(1)
 		return a, nil
-	case "enter", "right", "l":
+	case "pgup":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(a.scroll - a.detailViewportHeight())
+		}
+		return a, nil
+	case "pgdown":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(a.scroll + a.detailViewportHeight())
+		}
+		return a, nil
+	case "ctrl+u":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(a.scroll - a.detailViewportHeight()/2)
+		}
+		return a, nil
+	case "ctrl+d":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(a.scroll + a.detailViewportHeight()/2)
+		}
+		return a, nil
+	case "g", "home":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(0)
+		}
+		return a, nil
+	case "G", "end":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(a.scrollLimit())
+		}
+		return a, nil
+	case "enter":
 		if a.selected != "" {
 			a.inspect = a.selected
+			a.tableFocused = false
+			a.tableCursor = 0
 			return a, a.beginEntrance()
+		}
+		return a, nil
+	case "right", "l":
+		if a.inspect == "" && a.focus == focusTree && a.selected != "" {
+			if children := a.nodeChildren(a.selected); len(children) > 0 && !a.expandedState(a.selected, children) {
+				a.expanded[a.selected] = true
+				return a, nil
+			}
+		}
+		if a.selected != "" {
+			a.inspect = a.selected
+			a.tableFocused = false
+			a.tableCursor = 0
+			return a, a.beginEntrance()
+		}
+		return a, nil
+	case "space", " ":
+		if a.inspect == "" && a.focus == focusTree {
+			a.toggleFold()
 		}
 		return a, nil
 	case "r":
@@ -529,11 +806,45 @@ func (a app) View() tea.View {
 	content := a.render()
 	view := tea.NewView(content)
 	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
 	view.WindowTitle = "Muster · " + a.hostname
 	colors := newPalette(a.dark, a.noColor)
 	view.BackgroundColor = colors.bg
 	view.ForegroundColor = colors.fg
 	return view
+}
+
+// toggleFold flips the selected subtree between open and folded.
+func (a *app) toggleFold() {
+	if a.selected == "" {
+		return
+	}
+	children := a.nodeChildren(a.selected)
+	if len(children) == 0 {
+		return
+	}
+	a.expanded[a.selected] = !a.expandedState(a.selected, children)
+}
+
+// foldOrJumpToParent folds an open subtree; on a leaf or an already folded
+// node it climbs to the parent instead, the way file-tree UIs treat ←.
+func (a *app) foldOrJumpToParent() {
+	if a.selected == "" {
+		return
+	}
+	children := a.nodeChildren(a.selected)
+	if len(children) > 0 && a.expandedState(a.selected, children) {
+		a.expanded[a.selected] = false
+		return
+	}
+	for _, row := range a.treeRows() {
+		if row.id == a.selected {
+			if row.parent != "" {
+				a.selected = row.parent
+			}
+			return
+		}
+	}
 }
 
 func (a *app) ensureSelection() {
@@ -543,22 +854,48 @@ func (a *app) ensureSelection() {
 		a.inspect = ""
 		return
 	}
+	validateInspect := func() {
+		if a.inspect != "" {
+			if _, exists := a.graph.Lookup(a.inspect); !exists {
+				a.inspect = ""
+			}
+		}
+	}
 	for _, row := range rows {
 		if row.id == a.selected {
-			if a.inspect != "" {
-				if _, exists := a.graph.Lookup(a.inspect); !exists {
-					a.inspect = ""
-				}
-			}
+			validateInspect()
 			return
 		}
 	}
+	// The selection may have been folded away (for example after a refresh
+	// turned its subtree healthy); stay as close to it as possible.
+	if ancestor := a.nearestVisibleAncestor(a.selected, rows); ancestor != "" {
+		a.selected = ancestor
+		validateInspect()
+		return
+	}
 	a.selected = rows[0].id
-	if a.inspect != "" {
-		if _, exists := a.graph.Lookup(a.inspect); !exists {
-			a.inspect = ""
+	validateInspect()
+}
+
+func (a app) nearestVisibleAncestor(id model.ID, visible []treeRow) model.ID {
+	if id == "" {
+		return ""
+	}
+	parents := make(map[model.ID]model.ID)
+	for _, row := range a.allTreeRows() {
+		parents[row.id] = row.parent
+	}
+	shown := make(map[model.ID]bool, len(visible))
+	for _, row := range visible {
+		shown[row.id] = true
+	}
+	for current := parents[id]; current != ""; current = parents[current] {
+		if shown[current] {
+			return current
 		}
 	}
+	return ""
 }
 
 func (a *app) moveSelection(delta int) {
