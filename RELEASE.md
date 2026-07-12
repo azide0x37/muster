@@ -1,29 +1,30 @@
-# Muster 0.1.1
+# Muster 0.1.2
 
-Muster 0.1.1 makes the shared host inspector feel at home in the terminal while
-preserving its single, addressable runtime object graph.
+Muster 0.1.2 reorganizes the shared host inspector around operational triage
+while preserving the same normalized, addressable object graph.
 
 ## Changed
 
-- Refined the full-screen inspector with a colorful wordmark, clearer panel
-  titles, health-aware counts, a segmented status bar, and contextual key hints.
-- Added spring-smoothed navigation, an animated activity indicator, and a
-  breathing fleet-health signal using Bubbles and Harmonica.
-- Added `MUSTER_REDUCE_MOTION=1` for an entirely still console.
-- Made doctor confirmation an unmistakable modal that remains within the
-  smallest supported terminal.
-- Updated Bubble Tea, Bubbles, Lip Gloss, and the supporting Charm libraries.
+- Replaced the flat implementation list with implementation cards that expose
+  health, version, selection, and visible-object counts directly in the frame.
+- Folded fully healthy subtrees by default while automatically opening paths to
+  degraded, unhealthy, or unknown objects.
+- Added a live `/` filter across implementation cards with lineage-preserving
+  matches and highlighted query text.
+- Added viewport-backed scrolling, mouse-wheel support, page navigation, and
+  proportional scrollbars to overview, inspect, and help panes.
+- Rendered observation checks and metadata as aligned, keyboard-navigable
+  tables.
+- Reworked overview and inspect views to lead with verdicts, health causes, and
+  fresh evidence before literate context.
+- Removed redundant or undeclared placeholder sections so simple components
+  remain concise and factual.
 
 ## Operational contract
 
+- The object model, CLI commands, registration schema, and observation format
+  remain compatible with 0.1.x implementations.
 - Installing the first Muster implementation installs the shared inspector.
 - Later implementations register without replacing or downgrading that core.
-- An implementation uninstaller removes only its own registration.
-- The inspector is read-only during initial rendering; doctor execution is an
-  explicit advertised action that declares and enforces its root requirement.
-- Failed doctors still publish and refresh structured evidence; stale evidence
-  is rendered as unknown rather than reusing an old green result.
-- Recursive health exports retain both declared and effective values so
-  `muster explain` can show the actual component and graph path responsible.
 - Core releases remain checksum-verified, immutable, and independently
   versioned from implementation releases.
