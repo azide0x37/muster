@@ -62,7 +62,9 @@ func Run(graph *model.Graph, opts Options) error {
 	if err := graph.Validate(); err != nil {
 		return fmt.Errorf("tui: invalid graph: %w", err)
 	}
-	_, err := tea.NewProgram(newApp(graph, opts)).Run()
+	app := newApp(graph, opts)
+	app.refreshedAt = time.Now()
+	_, err := tea.NewProgram(app).Run()
 	return err
 }
 
@@ -109,6 +111,13 @@ type app struct {
 	confirmAction model.ID
 	confirmTarget model.ID
 
+	// expanded holds explicit fold toggles by object ID. Nodes without an
+	// entry fold by default when their whole subtree is healthy.
+	expanded map[model.ID]bool
+	// refreshedAt is when the graph now on screen was produced. It stays zero
+	// in deterministic renders so snapshots never embed a wall clock.
+	refreshedAt time.Time
+
 	// Motion state. scroll is always the destination; scrollPos is where the
 	// eye currently is. The deterministic Render path never animates, so the
 	// two only diverge inside a live program.
@@ -138,6 +147,7 @@ func newApp(graph *model.Graph, opts Options) app {
 		dark:         true,
 		noColor:      opts.NoColor,
 		forceNoColor: opts.NoColor,
+		expanded:     map[model.ID]bool{},
 		keys:         newKeymap(),
 		spin:         spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(spinnerStyle(true, opts.NoColor))),
 		reduceMotion: os.Getenv(reduceMotionEnv) != "",
@@ -152,6 +162,8 @@ type keymap struct {
 	move      key.Binding
 	scroll    key.Binding
 	inspect   key.Binding
+	fold      key.Binding
+	unfold    key.Binding
 	back      key.Binding
 	pane      key.Binding
 	doctor    key.Binding
@@ -168,6 +180,8 @@ func newKeymap() keymap {
 		move:      key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "move")),
 		scroll:    key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "scroll")),
 		inspect:   key.NewBinding(key.WithKeys("enter", "right", "l"), key.WithHelp("enter", "inspect")),
+		fold:      key.NewBinding(key.WithKeys("space", "h", "left"), key.WithHelp("space", "fold")),
+		unfold:    key.NewBinding(key.WithKeys("space", "l", "right"), key.WithHelp("space", "unfold")),
 		back:      key.NewBinding(key.WithKeys("esc", "backspace", "left", "h"), key.WithHelp("esc", "back")),
 		pane:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "pane")),
 		doctor:    key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
@@ -192,7 +206,17 @@ func (a app) ribbonBindings() []key.Binding {
 	if a.inspect != "" {
 		bindings = []key.Binding{k.scroll, k.back}
 	} else {
-		bindings = []key.Binding{k.move, k.inspect, k.pane}
+		bindings = []key.Binding{k.move, k.inspect}
+		if a.focus == focusTree && a.selected != "" {
+			if children := a.nodeChildren(a.selected); len(children) > 0 {
+				if a.expandedState(a.selected, children) {
+					bindings = append(bindings, k.fold)
+				} else {
+					bindings = append(bindings, k.unfold)
+				}
+			}
+		}
+		bindings = append(bindings, k.pane)
 	}
 	if _, ok := a.doctorAction(a.activeID()); ok && a.opts.RunDoctor != nil {
 		bindings = append(bindings, k.doctor)
@@ -338,12 +362,15 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		a.graph = message.graph
+		a.refreshedAt = time.Now()
 		a.ensureSelection()
 		a.scroll = a.clampScroll(a.scroll)
 		if afterDoctor {
 			a.status = previousStatus + " · runtime graph refreshed"
 		} else {
-			a.status = "Runtime graph refreshed"
+			// The status bar's default line shows the new state-as-of time,
+			// which is the whole story of a successful refresh.
+			a.status = ""
 		}
 		return a, nil
 	case doctorDoneMsg:
@@ -360,6 +387,7 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			a.graph = message.graph
+			a.refreshedAt = time.Now()
 			a.ensureSelection()
 			a.scroll = a.clampScroll(a.scroll)
 			a.status += " · runtime graph refreshed"
@@ -420,7 +448,7 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 		a.scroll = 0
 		a.snapScroll()
 		return a, nil
-	case "esc", "escape", "backspace", "left", "h":
+	case "esc", "escape", "backspace":
 		if a.inspect != "" {
 			a.inspect = ""
 			a.scroll = 0
@@ -430,6 +458,20 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 			a.focus = focusTree
 			a.scroll = 0
 			a.snapScroll()
+		}
+		return a, nil
+	case "left", "h":
+		if a.inspect != "" {
+			a.inspect = ""
+			a.scroll = 0
+			a.snapScroll()
+			a.focus = focusTree
+		} else if a.focus == focusDetail {
+			a.focus = focusTree
+			a.scroll = 0
+			a.snapScroll()
+		} else {
+			a.foldOrJumpToParent()
 		}
 		return a, nil
 	case "tab":
@@ -455,10 +497,27 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 		}
 		a.moveSelection(1)
 		return a, nil
-	case "enter", "right", "l":
+	case "enter":
 		if a.selected != "" {
 			a.inspect = a.selected
 			return a, a.beginEntrance()
+		}
+		return a, nil
+	case "right", "l":
+		if a.inspect == "" && a.focus == focusTree && a.selected != "" {
+			if children := a.nodeChildren(a.selected); len(children) > 0 && !a.expandedState(a.selected, children) {
+				a.expanded[a.selected] = true
+				return a, nil
+			}
+		}
+		if a.selected != "" {
+			a.inspect = a.selected
+			return a, a.beginEntrance()
+		}
+		return a, nil
+	case "space", " ":
+		if a.inspect == "" && a.focus == focusTree {
+			a.toggleFold()
 		}
 		return a, nil
 	case "r":
@@ -536,6 +595,39 @@ func (a app) View() tea.View {
 	return view
 }
 
+// toggleFold flips the selected subtree between open and folded.
+func (a *app) toggleFold() {
+	if a.selected == "" {
+		return
+	}
+	children := a.nodeChildren(a.selected)
+	if len(children) == 0 {
+		return
+	}
+	a.expanded[a.selected] = !a.expandedState(a.selected, children)
+}
+
+// foldOrJumpToParent folds an open subtree; on a leaf or an already folded
+// node it climbs to the parent instead, the way file-tree UIs treat ←.
+func (a *app) foldOrJumpToParent() {
+	if a.selected == "" {
+		return
+	}
+	children := a.nodeChildren(a.selected)
+	if len(children) > 0 && a.expandedState(a.selected, children) {
+		a.expanded[a.selected] = false
+		return
+	}
+	for _, row := range a.treeRows() {
+		if row.id == a.selected {
+			if row.parent != "" {
+				a.selected = row.parent
+			}
+			return
+		}
+	}
+}
+
 func (a *app) ensureSelection() {
 	rows := a.treeRows()
 	if len(rows) == 0 {
@@ -543,22 +635,48 @@ func (a *app) ensureSelection() {
 		a.inspect = ""
 		return
 	}
+	validateInspect := func() {
+		if a.inspect != "" {
+			if _, exists := a.graph.Lookup(a.inspect); !exists {
+				a.inspect = ""
+			}
+		}
+	}
 	for _, row := range rows {
 		if row.id == a.selected {
-			if a.inspect != "" {
-				if _, exists := a.graph.Lookup(a.inspect); !exists {
-					a.inspect = ""
-				}
-			}
+			validateInspect()
 			return
 		}
 	}
+	// The selection may have been folded away (for example after a refresh
+	// turned its subtree healthy); stay as close to it as possible.
+	if ancestor := a.nearestVisibleAncestor(a.selected, rows); ancestor != "" {
+		a.selected = ancestor
+		validateInspect()
+		return
+	}
 	a.selected = rows[0].id
-	if a.inspect != "" {
-		if _, exists := a.graph.Lookup(a.inspect); !exists {
-			a.inspect = ""
+	validateInspect()
+}
+
+func (a app) nearestVisibleAncestor(id model.ID, visible []treeRow) model.ID {
+	if id == "" {
+		return ""
+	}
+	parents := make(map[model.ID]model.ID)
+	for _, row := range a.allTreeRows() {
+		parents[row.id] = row.parent
+	}
+	shown := make(map[model.ID]bool, len(visible))
+	for _, row := range visible {
+		shown[row.id] = true
+	}
+	for current := parents[id]; current != ""; current = parents[current] {
+		if shown[current] {
+			return current
 		}
 	}
+	return ""
 }
 
 func (a *app) moveSelection(delta int) {

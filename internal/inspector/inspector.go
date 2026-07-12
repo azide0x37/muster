@@ -185,7 +185,7 @@ func (i *Inspector) projectLock(ctx context.Context, locked *lockfile.Document) 
 				result.observations = append(result.observations, *observation)
 			}
 		} else if component.ID == implementation.ID || len(component.Children) > 0 {
-			component.Health = model.Health{Status: model.HealthHealthy, Summary: "declared"}
+			component.Health = model.Health{Status: model.HealthHealthy, Summary: "declared, not probed"}
 		}
 		result.components = append(result.components, component)
 	}
@@ -224,7 +224,7 @@ func (i *Inspector) project(ctx context.Context, document manifest.Document, man
 	components := []model.Component{{
 		ID:               rootID,
 		Kind:             "implementation",
-		Health:           model.Health{Status: model.HealthHealthy, Summary: "declared implementation"},
+		Health:           model.Health{Status: model.HealthHealthy, Summary: "declared, not probed"},
 		Summary:          document.Inspection.Summary,
 		Children:         ids(document.Inspection.RootComponents),
 		What:             document.Inspection.Literate.What,
@@ -300,7 +300,7 @@ func (i *Inspector) inspectSource(ctx context.Context, project string, id model.
 				return model.Health{}, nil, fmt.Errorf("invalid declared status %q", source.Status)
 			}
 		}
-		return model.Health{Status: status, Summary: "declared " + string(status)}, nil, nil
+		return model.Health{Status: status, Summary: "declared, not probed"}, nil, nil
 	case "systemd.unit":
 		return i.inspectSystemd(ctx, source)
 	case "metadata.file":

@@ -278,7 +278,7 @@ func (a app) renderCountsCell(s styles) string {
 	c := s.colors
 	counts := map[model.HealthStatus]int{}
 	total := 0
-	for _, row := range a.treeRows() {
+	for _, row := range a.allTreeRows() {
 		if component, ok := a.graph.Lookup(row.id); ok {
 			counts[normalizedStatus(component.Health.Status)]++
 			total++
@@ -305,7 +305,10 @@ func (a app) renderCountsCell(s styles) string {
 }
 
 func (a app) renderMessageCell(width int, s styles) string {
-	message := "Read-only view · live state and declared intent share one graph"
+	message := "Read-only"
+	if !a.refreshedAt.IsZero() {
+		message += " · state as of " + a.refreshedAt.Format("15:04:05")
+	}
 	if a.status != "" {
 		message = a.status
 	}
@@ -351,9 +354,8 @@ func (a app) renderRibbon(width int, s styles) string {
 
 func (a app) renderTooSmall(width, height int, s styles) string {
 	lines := []string{
-		s.section.Render("A LITTLE MORE ROOM"),
-		s.body.Render("Muster keeps the view legible instead of crushing the graph."),
-		s.muted.Render(fmt.Sprintf("Current terminal: %d×%d · minimum: %d×%d", width, a.height, minimumWidth, minimumHeight)),
+		s.body.Render(fmt.Sprintf("Current terminal: %d×%d", width, a.height)),
+		s.muted.Render(fmt.Sprintf("Muster needs at least %d×%d.", minimumWidth, minimumHeight)),
 	}
 	return a.panel(width, height, false, "Terminal too small", lines, 0, s)
 }
@@ -365,8 +367,11 @@ func (a app) renderHelp(width, height int, s styles) string {
 	w.keyValue("↑ / k", "move up or scroll up")
 	w.keyValue("↓ / j", "move down or scroll down")
 	w.keyValue("tab", "move focus between the implementation tree and its summary")
-	w.keyValue("enter / → / l", "open the selected inspectable object")
-	w.keyValue("esc / backspace / ← / h", "return to the implementation tree")
+	w.keyValue("enter", "open the selected inspectable object")
+	w.keyValue("→ / l", "unfold the selected subtree, or open the object")
+	w.keyValue("← / h", "fold the selected subtree, or jump to its parent")
+	w.keyValue("space", "fold or unfold the selected subtree")
+	w.keyValue("esc / backspace", "return to the implementation tree")
 	w.section("Operations")
 	w.keyValue("r", "refresh the normalized runtime graph")
 	w.keyValue("d", "run doctor only when the selected object advertises that action")
@@ -378,7 +383,7 @@ func (a app) renderHelp(width, height int, s styles) string {
 	w.text("× UNHEALTHY  the declared contract is not being met", s.bad)
 	w.text("? UNKNOWN  Muster does not have enough current evidence", s.unknown)
 	w.blank()
-	w.paragraph("Design rule", "Color reinforces a word and glyph; it never carries status alone.")
+	w.paragraph("Reading the tree", "Healthy rows show only the glyph; a spelled-out status word marks something needing attention. Fully healthy subtrees start folded — ▸ counts the objects beneath a folded row.")
 	w.paragraph("Motion", "Scrolling glides and the status LED breathes. Set MUSTER_REDUCE_MOTION=1 to keep the console perfectly still.")
 	return a.panel(width, height, true, "Keyboard and language", w.lines, 0, s)
 }
@@ -403,28 +408,20 @@ func (a app) renderTreePanel(width, height int, focused bool, s styles) string {
 	lines := a.renderTreeLines(rows, innerWidth, s)
 	viewportHeight := max(1, height-2)
 	offset := selectedOffset(rows, a.selected, viewportHeight)
-	title := fmt.Sprintf("Implementations · %d objects", len(rows))
+	title := fmt.Sprintf("Implementations · %d objects", len(a.allTreeRows()))
 	return a.panel(width, height, focused, title, lines, offset, s)
 }
 
 func (a app) renderSummaryPanel(width, height int, focused bool, s styles) string {
 	innerWidth := max(8, width-4)
 	lines := a.overviewLines(a.selected, innerWidth, s)
-	title := "Selected object"
-	if component, ok := a.graph.Lookup(a.selected); ok {
-		title += " · " + string(component.Kind) + " · " + string(component.ID)
-	}
-	return a.panel(width, height, focused, title, lines, a.displayScroll(), s)
+	return a.panel(width, height, focused, "Selected object", lines, a.displayScroll(), s)
 }
 
 func (a app) renderInspector(width, height int, s styles) string {
 	innerWidth := max(8, width-4)
 	lines := a.inspectLines(a.inspect, innerWidth, s)
-	title := "Inspect"
-	if component, ok := a.graph.Lookup(a.inspect); ok {
-		title = "Inspect · " + string(component.Kind) + " · " + string(component.ID)
-	}
-	return a.panel(width, height, true, title, lines, a.displayScroll(), s)
+	return a.panel(width, height, true, "Inspect", lines, a.displayScroll(), s)
 }
 
 // panel draws a framed pane whose title lives inside the top border, the way
@@ -527,23 +524,47 @@ func (a app) overviewLines(id model.ID, width int, s styles) []string {
 		w.keyValue("Version", implementation.Version)
 	}
 
-	what := firstNonEmpty(component.What, component.Summary, "No literate description has been declared yet.")
-	w.paragraph("What", what)
-	why := firstNonEmpty(component.Why, "No rationale has been declared yet.")
-	w.paragraph("Why", why)
-
-	if len(component.Children) > 0 {
-		w.section(fmt.Sprintf("Children · %d", len(component.Children)))
-		for _, childID := range component.Children {
-			if child, found := a.graph.Lookup(childID); found {
-				w.healthObject("• "+displayName(*child), child.Health)
+	if explanation, err := a.graph.Explain(component.ID); err == nil &&
+		normalizedStatus(explanation.Health.Effective.Status) != model.HealthHealthy {
+		// The object restating itself as its own cause adds nothing over the
+		// verdict line above; only causes elsewhere in the graph earn a section.
+		causes := make([]string, 0, len(explanation.Health.Causes))
+		for _, cause := range explanation.Health.Causes {
+			if cause.ComponentID == component.ID && len(cause.Path) == 0 {
+				continue
+			}
+			line := a.nameFor(cause.ComponentID)
+			if len(cause.Path) > 0 {
+				line += " via " + healthPath(cause.Path, a)
+			}
+			causes = append(causes, line)
+		}
+		if len(causes) > 0 {
+			w.section("Health causes")
+			for _, cause := range causes {
+				w.bullet(cause)
 			}
 		}
 	}
 
-	if observation, found := a.graph.LatestObservation(component.ID, model.ObservationDoctor); found {
-		w.section("Latest doctor")
-		w.health(observation.DerivedHealth())
+	w.section("Latest evidence")
+	if observation, found := a.graph.LatestObservation(component.ID, ""); found {
+		w.healthObject(strings.ToUpper(string(observation.Kind))+" · "+observation.ObservedAt.Format(time.RFC3339), observation.DerivedHealth())
+		for _, check := range observation.Checks {
+			w.check(check)
+		}
+	} else {
+		w.text("No observations recorded for this object.", s.faint)
+	}
+
+	if len(component.Children) > 0 {
+		w.section(fmt.Sprintf("Children · %d", len(component.Children)))
+		parentName := displayName(*component)
+		for _, childID := range component.Children {
+			if child, found := a.graph.Lookup(childID); found {
+				w.healthObject("• "+contextualName(displayName(*child), []string{parentName}), child.Health)
+			}
+		}
 	}
 
 	relations := a.directRelations(component.ID)
@@ -565,8 +586,12 @@ func (a app) overviewLines(id model.ID, width int, s styles) []string {
 		}
 	}
 
-	w.blank()
-	w.text("Enter opens the complete literate object: intent, failure modes, evidence, and graph paths.", s.faint)
+	if what := firstNonEmpty(component.What, component.Summary); what != "" {
+		w.paragraph("What", what)
+	}
+	if why := strings.TrimSpace(component.Why); why != "" {
+		w.paragraph("Why", why)
+	}
 	return w.lines
 }
 
@@ -648,7 +673,7 @@ func (a app) inspectLines(id model.ID, width int, s styles) []string {
 			if !found {
 				continue
 			}
-			w.healthObject(row.prefix+displayName(*child), child.Health)
+			w.healthObject(row.prefix+row.label, child.Health)
 		}
 	}
 
@@ -817,9 +842,23 @@ type treeRow struct {
 	id     model.ID
 	prefix string
 	root   bool
+	label  string
+	parent model.ID
+	hidden int // objects folded away beneath this row
 }
 
+// treeRows is the visible tree: fully healthy subtrees stay folded unless the
+// operator opened them, and every path to a non-healthy object is open.
 func (a app) treeRows() []treeRow {
+	return a.buildTreeRows(true)
+}
+
+// allTreeRows ignores folding; counters and ancestry lookups need every object.
+func (a app) allTreeRows() []treeRow {
+	return a.buildTreeRows(false)
+}
+
+func (a app) buildTreeRows(fold bool) []treeRow {
 	if a.graph == nil {
 		return nil
 	}
@@ -829,25 +868,96 @@ func (a app) treeRows() []treeRow {
 		if !ok {
 			continue
 		}
-		rows = append(rows, treeRow{id: root.ID, root: true})
-		seen := map[model.ID]bool{root.ID: true}
-		children := append([]model.ID(nil), root.Children...)
-		for _, child := range children {
-			markDescendants(a.graph, child, seen)
+		children := a.implementationChildren(implementation, root)
+		rootName := displayName(*root)
+		row := treeRow{id: root.ID, root: true, label: rootName}
+		if fold && !a.expandedState(root.ID, children) {
+			row.hidden = countDescendants(a.graph, children)
+			rows = append(rows, row)
+			continue
 		}
-		for _, componentID := range implementation.Components {
-			if !seen[componentID] {
-				children = append(children, componentID)
-				markDescendants(a.graph, componentID, seen)
-			}
-		}
+		rows = append(rows, row)
 		path := map[model.ID]bool{root.ID: true}
 		rendered := map[model.ID]bool{root.ID: true}
+		ancestors := []string{rootName}
 		for index, child := range children {
-			a.appendTree(&rows, child, "", index == len(children)-1, path, rendered)
+			a.appendTree(&rows, child, root.ID, "", index == len(children)-1, path, rendered, ancestors, fold)
 		}
 	}
 	return rows
+}
+
+// implementationChildren is the root's effective child list: declared children
+// plus any registered components not reachable through them.
+func (a app) implementationChildren(implementation model.Implementation, root *model.Component) []model.ID {
+	seen := map[model.ID]bool{root.ID: true}
+	children := append([]model.ID(nil), root.Children...)
+	for _, child := range children {
+		markDescendants(a.graph, child, seen)
+	}
+	for _, componentID := range implementation.Components {
+		if !seen[componentID] {
+			children = append(children, componentID)
+			markDescendants(a.graph, componentID, seen)
+		}
+	}
+	return children
+}
+
+// nodeChildren returns the child list folding operates on, which for an
+// implementation root includes components outside its declared children.
+func (a app) nodeChildren(id model.ID) []model.ID {
+	component, ok := a.graph.Lookup(id)
+	if !ok {
+		return nil
+	}
+	if implementation, isImplementation := a.graph.LookupImplementation(id); isImplementation {
+		return a.implementationChildren(*implementation, component)
+	}
+	return append([]model.ID(nil), component.Children...)
+}
+
+// expandedState resolves one node: an explicit operator toggle wins, otherwise
+// a subtree is open exactly when something inside it is not healthy.
+func (a app) expandedState(id model.ID, children []model.ID) bool {
+	if state, ok := a.expanded[id]; ok {
+		return state
+	}
+	seen := map[model.ID]bool{}
+	for _, child := range children {
+		if a.needsAttention(child, seen) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a app) needsAttention(id model.ID, seen map[model.ID]bool) bool {
+	if seen[id] {
+		return false
+	}
+	seen[id] = true
+	component, ok := a.graph.Lookup(id)
+	if !ok {
+		return false
+	}
+	if normalizedStatus(component.Health.Status) != model.HealthHealthy {
+		return true
+	}
+	for _, child := range component.Children {
+		if a.needsAttention(child, seen) {
+			return true
+		}
+	}
+	return false
+}
+
+func countDescendants(graph *model.Graph, children []model.ID) int {
+	seen := map[model.ID]bool{}
+	for _, child := range children {
+		markDescendants(graph, child, seen)
+	}
+	return len(seen)
 }
 
 func markDescendants(graph *model.Graph, id model.ID, seen map[model.ID]bool) {
@@ -862,7 +972,7 @@ func markDescendants(graph *model.Graph, id model.ID, seen map[model.ID]bool) {
 	}
 }
 
-func (a app) appendTree(rows *[]treeRow, id model.ID, parentPrefix string, last bool, path, rendered map[model.ID]bool) {
+func (a app) appendTree(rows *[]treeRow, id, parent model.ID, parentPrefix string, last bool, path, rendered map[model.ID]bool, ancestors []string, fold bool) {
 	if path[id] || rendered[id] {
 		return
 	}
@@ -876,12 +986,21 @@ func (a app) appendTree(rows *[]treeRow, id model.ID, parentPrefix string, last 
 		connector = "└─ "
 		nextPrefix = parentPrefix + "   "
 	}
-	*rows = append(*rows, treeRow{id: id, prefix: parentPrefix + connector})
+	name := displayName(*component)
+	row := treeRow{id: id, prefix: parentPrefix + connector, label: contextualName(name, ancestors), parent: parent}
+	if fold && len(component.Children) > 0 && !a.expandedState(id, component.Children) {
+		row.hidden = countDescendants(a.graph, component.Children)
+		*rows = append(*rows, row)
+		rendered[id] = true
+		return
+	}
+	*rows = append(*rows, row)
 	rendered[id] = true
 	nextPath := clonePath(path)
 	nextPath[id] = true
+	nextAncestors := append(append([]string(nil), ancestors...), name)
 	for index, child := range component.Children {
-		a.appendTree(rows, child, nextPrefix, index == len(component.Children)-1, nextPath, rendered)
+		a.appendTree(rows, child, id, nextPrefix, index == len(component.Children)-1, nextPath, rendered, nextAncestors, fold)
 	}
 }
 
@@ -893,8 +1012,9 @@ func (a app) childRows(id model.ID) []treeRow {
 	rows := make([]treeRow, 0)
 	path := map[model.ID]bool{id: true}
 	rendered := map[model.ID]bool{id: true}
+	ancestors := []string{displayName(*component)}
 	for index, child := range component.Children {
-		a.appendTree(&rows, child, "", index == len(component.Children)-1, path, rendered)
+		a.appendTree(&rows, child, id, "", index == len(component.Children)-1, path, rendered, ancestors, false)
 	}
 	return rows
 }
@@ -912,7 +1032,6 @@ func (a app) renderTreeLines(rows []treeRow, width int, s styles) []string {
 		return []string{
 			s.section.Render("NO IMPLEMENTATIONS REGISTERED"),
 			s.body.Render("The first Muster service installed on this server will appear here."),
-			s.muted.Render("The console itself is ready."),
 		}
 	}
 	lines := make([]string, 0, len(rows))
@@ -927,8 +1046,10 @@ func (a app) renderTreeLines(rows []treeRow, width int, s styles) []string {
 }
 
 // renderTreeRow lays out one object: selection bar, tree lineage, health
-// glyph, name, and a right-aligned status word. The selected row reads as a
-// charm-style list item — accent bar on a raised background.
+// glyph, contextual name, fold count, and a right-aligned status word. The
+// selected row reads as a charm-style list item — accent bar on a raised
+// background. Healthy rows keep only the glyph so a spelled-out status word
+// always marks something needing attention.
 func (a app) renderTreeRow(row treeRow, component model.Component, width int, s styles) string {
 	selected := row.id == a.selected
 	indicator := "  "
@@ -936,13 +1057,20 @@ func (a app) renderTreeRow(row treeRow, component model.Component, width int, s 
 		indicator = "▌ "
 	}
 	glyph := healthGlyph(component.Health.Status)
-	statusWord := strings.ToUpper(string(normalizedStatus(component.Health.Status)))
-	nameWidth := max(1, width-runeWidth(indicator+row.prefix)-runeWidth(glyph)-runeWidth(statusWord)-3)
-	name := truncatePlain(displayName(component), nameWidth)
-	padding := max(1, width-runeWidth(indicator+row.prefix)-runeWidth(glyph)-1-runeWidth(name)-runeWidth(statusWord))
+	statusWord := ""
+	if status := normalizedStatus(component.Health.Status); status != model.HealthHealthy {
+		statusWord = strings.ToUpper(string(status))
+	}
+	foldMark := ""
+	if row.hidden > 0 {
+		foldMark = fmt.Sprintf(" ▸ %d", row.hidden)
+	}
+	nameWidth := max(1, width-runeWidth(indicator+row.prefix)-runeWidth(glyph)-runeWidth(foldMark)-runeWidth(statusWord)-3)
+	name := truncatePlain(row.label, nameWidth)
+	padding := max(1, width-runeWidth(indicator+row.prefix)-runeWidth(glyph)-1-runeWidth(name)-runeWidth(foldMark)-runeWidth(statusWord))
 
 	if s.noColor {
-		return indicator + row.prefix + glyph + " " + name + strings.Repeat(" ", padding) + statusWord
+		return indicator + row.prefix + glyph + " " + name + foldMark + strings.Repeat(" ", padding) + statusWord
 	}
 	if selected {
 		raised := lipgloss.NewStyle().Background(s.colors.panelHigh)
@@ -950,8 +1078,9 @@ func (a app) renderTreeRow(row treeRow, component model.Component, width int, s 
 			raised.Foreground(s.colors.faint).Render(row.prefix) +
 			raised.Foreground(healthColor(component.Health.Status, s.colors)).Render(glyph) +
 			s.selected.Render(" "+name) +
+			raised.Foreground(s.colors.faint).Render(foldMark) +
 			raised.Render(strings.Repeat(" ", padding)) +
-			raised.Foreground(s.colors.muted).Render(statusWord)
+			raised.Foreground(healthColor(component.Health.Status, s.colors)).Render(statusWord)
 	}
 	nameStyle := s.body
 	if row.root {
@@ -960,8 +1089,9 @@ func (a app) renderTreeRow(row treeRow, component model.Component, width int, s 
 	return indicator + s.faint.Render(row.prefix) +
 		healthStyle(component.Health.Status, s).Render(glyph) +
 		nameStyle.Render(" "+name) +
+		s.faint.Render(foldMark) +
 		strings.Repeat(" ", padding) +
-		s.faint.Render(statusWord)
+		healthStyle(component.Health.Status, s).Render(statusWord)
 }
 
 func selectedOffset(rows []treeRow, selected model.ID, height int) int {
@@ -978,6 +1108,54 @@ func selectedOffset(rows []treeRow, selected model.ID, height int) int {
 	return index - height + 1
 }
 
+// systemdUnitSuffixes mark ID tails that are operational identifiers — the
+// strings an operator pastes into systemctl or journalctl. They stay verbatim;
+// prettifying them destroys case, templates (@), and the unit type.
+var systemdUnitSuffixes = []string{
+	".service", ".socket", ".device", ".mount", ".automount",
+	".swap", ".target", ".path", ".timer", ".slice", ".scope",
+}
+
+func machineIdentifier(value string) bool {
+	for _, suffix := range systemdUnitSuffixes {
+		if strings.HasSuffix(value, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+// contextualName removes ancestor names repeated at the front of a child's
+// name, so each tree row leads with what distinguishes it instead of
+// re-stating the lineage the tree already draws.
+func contextualName(name string, ancestors []string) string {
+	words := strings.Fields(name)
+	for stripped := true; stripped; {
+		stripped = false
+		for _, ancestor := range ancestors {
+			prefix := strings.Fields(ancestor)
+			if len(prefix) == 0 || len(words) <= len(prefix) || !equalWordsFold(words[:len(prefix)], prefix) {
+				continue
+			}
+			words = words[len(prefix):]
+			stripped = true
+		}
+	}
+	if len(words) == 0 {
+		return name
+	}
+	return strings.Join(words, " ")
+}
+
+func equalWordsFold(a, b []string) bool {
+	for index := range a {
+		if !strings.EqualFold(a[index], b[index]) {
+			return false
+		}
+	}
+	return true
+}
+
 func displayName(component model.Component) string {
 	for _, key := range []string{"display_name", "name", "project", "unit", "label"} {
 		if value := strings.TrimSpace(component.Metadata[key]); value != "" {
@@ -985,6 +1163,11 @@ func displayName(component model.Component) string {
 		}
 	}
 	value := string(component.ID)
+	if index := strings.LastIndexByte(value, ':'); index >= 0 && index+1 < len(value) {
+		if tail := value[index+1:]; machineIdentifier(tail) {
+			return tail
+		}
+	}
 	if index := strings.IndexRune(value, ':'); index >= 0 && index+1 < len(value) {
 		value = value[index+1:]
 	}
@@ -1145,7 +1328,10 @@ func (w *lineWriter) health(health model.Health) {
 }
 
 func (w *lineWriter) healthObject(label string, health model.Health) {
-	line := healthGlyph(health.Status) + " " + label + " · " + strings.ToUpper(string(normalizedStatus(health.Status)))
+	line := healthGlyph(health.Status) + " " + label
+	if status := normalizedStatus(health.Status); status != model.HealthHealthy {
+		line += " · " + strings.ToUpper(string(status))
+	}
 	w.text(line, healthStyle(health.Status, w.style))
 	if health.Summary != "" {
 		w.text("  "+health.Summary, w.style.muted)
