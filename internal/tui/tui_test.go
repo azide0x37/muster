@@ -102,6 +102,41 @@ func TestRenderInspectorShowsCompleteGenericObject(t *testing.T) {
 	)
 }
 
+func TestInspectOmitsUndeclaredSections(t *testing.T) {
+	graph := fixtureGraph(t)
+	output := Render(graph, RenderOptions{
+		Hostname: "shed-pi-01", Width: 110, Height: 60, NoColor: true,
+		Selected: "component:weather.publisher",
+		Inspect:  "component:weather.publisher",
+	})
+
+	for _, placeholder := range []string{
+		"Not declared.",
+		"No responsibilities declared.",
+		"No failure modes declared.",
+		"No child components.",
+		"No direct graph relations.",
+		"No transitive dependency paths.",
+		"No metadata.",
+		"No actions advertised.",
+	} {
+		if strings.Contains(output, placeholder) {
+			t.Errorf("inspect rendered placeholder %q for undeclared content", placeholder)
+		}
+	}
+	for _, section := range []string{"WHAT", "WHY", "RESPONSIBILITIES", "FAILURE MODES", "RELATIONS", "ACTIONS"} {
+		if strings.Contains(output, section) {
+			t.Errorf("inspect rendered section %q for undeclared content", section)
+		}
+	}
+	assertContains(t, output,
+		"Weather Publisher",
+		"HEALTH EXPLANATION",
+		"OBSERVATIONS",
+		"No recorded observations.",
+	)
+}
+
 func TestNarrowLayoutUsesOnePaneAndNeverOverflows(t *testing.T) {
 	graph := fixtureGraph(t)
 	opts := RenderOptions{

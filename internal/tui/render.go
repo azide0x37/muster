@@ -618,22 +618,25 @@ func (a app) inspectLines(id model.ID, width int, s styles) []string {
 		}
 	}
 
-	w.paragraph("What", firstNonEmpty(component.What, component.Summary, "Not declared."))
-	w.paragraph("Why", firstNonEmpty(component.Why, "Not declared."))
+	// Undeclared sections are omitted rather than rendered as placeholders: a
+	// plain unit should read as a short factual record, not a wall of "Not
+	// declared." Absent evidence is the one absence worth stating, below.
+	if what := firstNonEmpty(component.What, component.Summary); what != "" {
+		w.paragraph("What", what)
+	}
+	if why := strings.TrimSpace(component.Why); why != "" {
+		w.paragraph("Why", why)
+	}
 
-	w.section("Responsibilities")
-	if len(component.Responsibilities) == 0 {
-		w.text("No responsibilities declared.", s.faint)
-	} else {
+	if len(component.Responsibilities) > 0 {
+		w.section("Responsibilities")
 		for _, responsibility := range component.Responsibilities {
 			w.bullet(responsibility)
 		}
 	}
 
-	w.section("Failure modes")
-	if len(component.FailureModes) == 0 {
-		w.text("No failure modes declared.", s.faint)
-	} else {
+	if len(component.FailureModes) > 0 {
+		w.section("Failure modes")
 		for _, failure := range component.FailureModes {
 			w.text("× "+firstNonEmpty(failure.Summary, failure.ID), s.bad)
 			if failure.ID != "" && failure.ID != failure.Summary {
@@ -663,11 +666,8 @@ func (a app) inspectLines(id model.ID, width int, s styles) []string {
 		}
 	}
 
-	w.section("Children · hierarchy")
-	childRows := a.childRows(component.ID)
-	if len(childRows) == 0 {
-		w.text("No child components.", s.faint)
-	} else {
+	if childRows := a.childRows(component.ID); len(childRows) > 0 {
+		w.section("Children · hierarchy")
 		for _, row := range childRows {
 			child, found := a.graph.Lookup(row.id)
 			if !found {
@@ -677,21 +677,16 @@ func (a app) inspectLines(id model.ID, width int, s styles) []string {
 		}
 	}
 
-	w.section("Relations")
-	relations := a.directRelations(component.ID)
-	if len(relations) == 0 {
-		w.text("No direct graph relations.", s.faint)
-	} else {
+	if relations := a.directRelations(component.ID); len(relations) > 0 {
+		w.section("Relations")
 		for _, relation := range relations {
 			w.bullet(relation)
 		}
 	}
 
-	w.section("Dependency explanation")
-	if dependencies, err := a.graph.ExplainDependencies(component.ID); err == nil {
-		if len(dependencies.DependsOn) == 0 && len(dependencies.RequiredBy) == 0 {
-			w.text("No transitive dependency paths.", s.faint)
-		}
+	if dependencies, err := a.graph.ExplainDependencies(component.ID); err == nil &&
+		(len(dependencies.DependsOn) > 0 || len(dependencies.RequiredBy) > 0) {
+		w.section("Dependency explanation")
 		for _, dependency := range dependencies.DependsOn {
 			w.bullet("Needs " + a.nameFor(dependency.ComponentID) + " via " + a.idPath(dependency.Path))
 		}
@@ -700,10 +695,8 @@ func (a app) inspectLines(id model.ID, width int, s styles) []string {
 		}
 	}
 
-	w.section("Metadata")
-	if len(component.Metadata) == 0 {
-		w.text("No metadata.", s.faint)
-	} else {
+	if len(component.Metadata) > 0 {
+		w.section("Metadata")
 		keys := make([]string, 0, len(component.Metadata))
 		for key := range component.Metadata {
 			keys = append(keys, key)
@@ -714,10 +707,8 @@ func (a app) inspectLines(id model.ID, width int, s styles) []string {
 		}
 	}
 
-	w.section("Actions")
-	if len(component.Actions) == 0 {
-		w.text("No actions advertised.", s.faint)
-	} else {
+	if len(component.Actions) > 0 {
+		w.section("Actions")
 		for _, action := range component.Actions {
 			prefix := "•"
 			if isDoctorAction(action) {
