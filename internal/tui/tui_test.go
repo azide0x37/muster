@@ -735,6 +735,43 @@ func TestContextualNamesDropLineageAndKeepUnitIdentifiers(t *testing.T) {
 	}
 }
 
+func TestDetailPanesScrollWithViewportAndScrollbar(t *testing.T) {
+	graph := fixtureGraph(t)
+	output := Render(graph, RenderOptions{
+		Hostname: "shed-pi-01", Width: 110, Height: 24, NoColor: true,
+		Selected: "component:pattern.conveyor",
+		Inspect:  "component:pattern.conveyor",
+	})
+	if !strings.Contains(output, "┃") || !strings.Contains(output, "╎") {
+		t.Fatal("overflowing inspect pane did not render a scrollbar")
+	}
+	if strings.Contains(output, "more line") {
+		t.Fatal("scrollbar should replace the more-lines hint in detail panes")
+	}
+
+	a := newApp(graph, Options{Hostname: "shed-pi-01", NoColor: true})
+	a.width, a.height = 110, 24
+	a.selected = "component:pattern.conveyor"
+	a.inspect = a.selected
+	page := a.detailViewportHeight()
+
+	updatedModel, _ := a.handleKey("pgdown")
+	a = updatedModel.(app)
+	if a.scroll != page {
+		t.Fatalf("pgdown scrolled to %d, want one page (%d)", a.scroll, page)
+	}
+	updatedModel, _ = a.handleKey("G")
+	a = updatedModel.(app)
+	if a.scroll != a.scrollLimit() {
+		t.Fatalf("G scrolled to %d, want bottom (%d)", a.scroll, a.scrollLimit())
+	}
+	updatedModel, _ = a.handleKey("g")
+	a = updatedModel.(app)
+	if a.scroll != 0 {
+		t.Fatalf("g scrolled to %d, want top", a.scroll)
+	}
+}
+
 func TestMotionSpringSettlesAndHonorsReducedMotion(t *testing.T) {
 	a := newApp(fixtureGraph(t), Options{Hostname: "shed-pi-01"})
 	a.width, a.height = 118, 34

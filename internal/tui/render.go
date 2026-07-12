@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode"
 
+	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
 
 	"github.com/azide0x37/muster/internal/model"
@@ -368,10 +369,16 @@ func (a app) renderTooSmall(width, height int, s styles) string {
 
 func (a app) renderHelp(width, height int, s styles) string {
 	contentWidth := max(12, width-4)
+	return a.panel(width, height, true, "Keyboard and language", a.helpLines(contentWidth, s), a.displayScroll(), s)
+}
+
+func (a app) helpLines(contentWidth int, s styles) []string {
 	w := newLineWriter(contentWidth, s)
 	w.section("Navigation")
 	w.keyValue("↑ / k", "move up or scroll up")
 	w.keyValue("↓ / j", "move down or scroll down")
+	w.keyValue("pgup / pgdn · ctrl+u / ctrl+d · g / G", "page, half-page, or jump within a scrolling pane")
+	w.keyValue("/", "filter the tree; enter applies, esc clears")
 	w.keyValue("tab", "move focus between the implementation tree and its summary")
 	w.keyValue("enter", "open the selected inspectable object")
 	w.keyValue("→ / l", "unfold the selected subtree, or open the object")
@@ -391,7 +398,7 @@ func (a app) renderHelp(width, height int, s styles) string {
 	w.blank()
 	w.paragraph("Reading the tree", "Healthy rows show only the glyph; a spelled-out status word marks something needing attention. Fully healthy subtrees start folded — ▸ counts the objects beneath a folded row.")
 	w.paragraph("Motion", "Scrolling glides and the status LED breathes. Set MUSTER_REDUCE_MOTION=1 to keep the console perfectly still.")
-	return a.panel(width, height, true, "Keyboard and language", w.lines, 0, s)
+	return w.lines
 }
 
 func (a app) renderBrowser(width, height int, s styles) string {
@@ -417,7 +424,7 @@ func (a app) renderSidebar(width, height int, focused bool, s styles) string {
 	if selectedLine >= height {
 		offset = selectedLine - height + 1
 	}
-	visible := viewport(lines, offset, height, s)
+	visible := windowLines(lines, offset, height, s)
 	for index, line := range visible {
 		if lipgloss.Width(line) < width {
 			visible[index] = line + strings.Repeat(" ", width-lipgloss.Width(line))
@@ -709,12 +716,43 @@ func (a app) renderInspector(width, height int, s styles) string {
 
 // panel draws a framed pane whose title lives inside the top border, the way
 // charm-family tools label their windows. Focus is carried by border weight
-// or color and, in color terminals, by an accent→ember rule.
+// or color and, in color terminals, by an accent→ember rule. Content scrolls
+// through a bubbles viewport; overflow shows as a scrollbar on the right.
 func (a app) panel(width, height int, focused bool, title string, lines []string, offset int, s styles) string {
 	width = max(4, width)
 	height = max(3, height)
 	viewportHeight := max(1, height-2)
-	visible := viewport(lines, offset, viewportHeight, s)
+	// A negative offset pads the top with blank rows — the inspector's
+	// entrance glide slides new content up into place.
+	pad := 0
+	if offset < 0 {
+		pad = min(-offset, viewportHeight)
+		offset = 0
+	}
+	content := lines
+	if pad > 0 {
+		padded := make([]string, 0, pad+len(lines))
+		for index := 0; index < pad; index++ {
+			padded = append(padded, "")
+		}
+		content = append(padded, lines...)
+	}
+	innerWidth := max(1, width-4)
+	scrollbar := len(content) > viewportHeight
+	contentWidth := innerWidth
+	if scrollbar {
+		contentWidth = max(1, innerWidth-2)
+	}
+	vp := viewport.New()
+	vp.FillHeight = true
+	vp.SetWidth(contentWidth)
+	vp.SetHeight(viewportHeight)
+	vp.SetContentLines(content)
+	vp.SetYOffset(offset)
+	visible := strings.Split(vp.View(), "\n")
+	if scrollbar {
+		visible = attachScrollbar(visible, vp.YOffset(), vp.TotalLineCount(), viewportHeight, contentWidth, s)
+	}
 	top := panelTopLine(width, focused, truncatePlain(title, max(0, width-8)), s)
 	style := s.panelBody
 	if focused {
@@ -727,6 +765,30 @@ func (a app) panel(width, height int, focused bool, title string, lines []string
 		MaxHeight(height - 1).
 		Render(strings.Join(visible, "\n"))
 	return top + "\n" + body
+}
+
+// attachScrollbar decorates each visible line with a right-edge scrollbar:
+// a thumb sized and placed to show where the viewport sits in its content.
+func attachScrollbar(visible []string, offset, total, height, contentWidth int, s styles) []string {
+	track := max(1, height)
+	thumb := clamp(height*height/max(1, total), 1, track)
+	maxOffset := max(1, total-height)
+	position := 0
+	if offset > 0 {
+		position = clamp(offset*(track-thumb)/maxOffset, 0, track-thumb)
+	}
+	for index := range visible {
+		glyph, style := "╎", s.faint
+		if index >= position && index < position+thumb {
+			glyph, style = "┃", s.muted
+		}
+		line := visible[index]
+		if gap := contentWidth - lipgloss.Width(line); gap > 0 {
+			line += strings.Repeat(" ", gap)
+		}
+		visible[index] = line + " " + style.Render(glyph)
+	}
+	return visible
 }
 
 // panelTopLine draws the top border with the pane's title set into it:
@@ -757,9 +819,9 @@ func panelTopLine(width int, focused bool, title string, s styles) string {
 	return head + lineStyle.Render(strings.Repeat(horizontal, trail)+cornerR)
 }
 
-// viewport windows lines at offset. A negative offset pads the top with
-// blank rows — the inspector uses this to glide new content into place.
-func viewport(lines []string, offset, height int, s styles) []string {
+// windowLines windows lines at offset, padding to height and marking hidden
+// lines above and below — the sidebar's scroll treatment.
+func windowLines(lines []string, offset, height int, s styles) []string {
 	if height <= 0 {
 		return nil
 	}
@@ -1091,17 +1153,25 @@ func (a app) clampScroll(scroll int) int {
 	return clamp(scroll, 0, a.scrollLimit())
 }
 
+// detailViewportHeight is how many content lines a full-height detail pane
+// shows — the page size for paging keys.
+func (a app) detailViewportHeight() int {
+	_, height := a.dimensions()
+	bodyHeight := max(3, height-5)
+	return max(1, bodyHeight-2)
+}
+
 func (a app) scrollLimit() int {
-	width, height := a.dimensions()
-	headerHeight := 3
-	footerHeight := 2
-	bodyHeight := max(3, height-headerHeight-footerHeight)
-	viewportHeight := max(1, bodyHeight-2)
+	width, _ := a.dimensions()
+	viewportHeight := a.detailViewportHeight()
 	s := newStyles(a.dark, a.noColor)
 	var lineCount int
-	if a.inspect != "" {
+	switch {
+	case a.help:
+		lineCount = len(a.helpLines(max(12, width-4), s))
+	case a.inspect != "":
 		lineCount = len(a.inspectLines(a.inspect, max(8, width-4), s))
-	} else if a.focus == focusDetail {
+	case a.focus == focusDetail:
 		panelWidth := width
 		if width >= wideBreakpoint {
 			leftWidth := clamp(width*38/100, 34, 50)

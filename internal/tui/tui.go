@@ -213,18 +213,18 @@ type keymap struct {
 
 func newKeymap() keymap {
 	return keymap{
-		move:      key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "move")),
-		scroll:    key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "scroll")),
-		inspect:   key.NewBinding(key.WithKeys("enter", "right", "l"), key.WithHelp("enter", "inspect")),
-		fold:      key.NewBinding(key.WithKeys("space", "h", "left"), key.WithHelp("space", "fold")),
-		unfold:    key.NewBinding(key.WithKeys("space", "l", "right"), key.WithHelp("space", "unfold")),
-		back:      key.NewBinding(key.WithKeys("esc", "backspace", "left", "h"), key.WithHelp("esc", "back")),
-		pane:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "pane")),
-		doctor:    key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
-		refresh:   key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
-		help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
-		closeHelp: key.NewBinding(key.WithKeys("?", "esc"), key.WithHelp("?/esc", "close help")),
-		quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		move:        key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "move")),
+		scroll:      key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "scroll")),
+		inspect:     key.NewBinding(key.WithKeys("enter", "right", "l"), key.WithHelp("enter", "inspect")),
+		fold:        key.NewBinding(key.WithKeys("space", "h", "left"), key.WithHelp("space", "fold")),
+		unfold:      key.NewBinding(key.WithKeys("space", "l", "right"), key.WithHelp("space", "unfold")),
+		back:        key.NewBinding(key.WithKeys("esc", "backspace", "left", "h"), key.WithHelp("esc", "back")),
+		pane:        key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "pane")),
+		doctor:      key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "doctor")),
+		refresh:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
+		help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		closeHelp:   key.NewBinding(key.WithKeys("?", "esc"), key.WithHelp("?/esc", "close help")),
+		quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 		yes:         key.NewBinding(key.WithKeys("y", "enter"), key.WithHelp("y/enter", "confirm doctor")),
 		no:          key.NewBinding(key.WithKeys("n", "esc"), key.WithHelp("n/esc", "cancel")),
 		filter:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
@@ -449,6 +449,16 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return a, refreshCommand(a.opts.Refresh)
 		}
 		return a, nil
+	case tea.MouseWheelMsg:
+		if a.scrollingPane() {
+			switch message.Button {
+			case tea.MouseWheelUp:
+				return a, a.animateScrollTo(a.scroll - 3)
+			case tea.MouseWheelDown:
+				return a, a.animateScrollTo(a.scroll + 3)
+			}
+		}
+		return a, nil
 	case tea.KeyPressMsg:
 		if a.filterEditing {
 			return a.handleFilterKey(message)
@@ -456,6 +466,12 @@ func (a app) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleKey(message.String())
 	}
 	return a, nil
+}
+
+// scrollingPane reports whether keys should scroll a detail pane rather than
+// move the tree selection.
+func (a app) scrollingPane() bool {
+	return a.inspect != "" || a.focus == focusDetail || a.help
 }
 
 // handleFilterKey routes keys while the filter input is focused: navigation
@@ -538,6 +554,18 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 			a.help = false
 			a.scroll = 0
 			a.snapScroll()
+		case "up", "k":
+			return a, a.animateScrollTo(a.scroll - 1)
+		case "down", "j":
+			return a, a.animateScrollTo(a.scroll + 1)
+		case "pgup":
+			return a, a.animateScrollTo(a.scroll - a.detailViewportHeight())
+		case "pgdown":
+			return a, a.animateScrollTo(a.scroll + a.detailViewportHeight())
+		case "g", "home":
+			return a, a.animateScrollTo(0)
+		case "G", "end":
+			return a, a.animateScrollTo(a.scrollLimit())
 		}
 		return a, nil
 	}
@@ -595,16 +623,46 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 	case "up", "k":
-		if a.inspect != "" || a.focus == focusDetail {
+		if a.scrollingPane() {
 			return a, a.animateScrollTo(a.scroll - 1)
 		}
 		a.moveSelection(-1)
 		return a, nil
 	case "down", "j":
-		if a.inspect != "" || a.focus == focusDetail {
+		if a.scrollingPane() {
 			return a, a.animateScrollTo(a.scroll + 1)
 		}
 		a.moveSelection(1)
+		return a, nil
+	case "pgup":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(a.scroll - a.detailViewportHeight())
+		}
+		return a, nil
+	case "pgdown":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(a.scroll + a.detailViewportHeight())
+		}
+		return a, nil
+	case "ctrl+u":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(a.scroll - a.detailViewportHeight()/2)
+		}
+		return a, nil
+	case "ctrl+d":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(a.scroll + a.detailViewportHeight()/2)
+		}
+		return a, nil
+	case "g", "home":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(0)
+		}
+		return a, nil
+	case "G", "end":
+		if a.scrollingPane() {
+			return a, a.animateScrollTo(a.scrollLimit())
+		}
 		return a, nil
 	case "enter":
 		if a.selected != "" {
@@ -697,6 +755,7 @@ func (a app) View() tea.View {
 	content := a.render()
 	view := tea.NewView(content)
 	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
 	view.WindowTitle = "Muster · " + a.hostname
 	colors := newPalette(a.dark, a.noColor)
 	view.BackgroundColor = colors.bg
