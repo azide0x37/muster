@@ -120,6 +120,10 @@ type app struct {
 	// filterEditing routes keys into the input instead of navigation.
 	filter        textinput.Model
 	filterEditing bool
+	// tableFocused hands j/k to the latest observation's checks table in the
+	// inspect view; tableCursor is the row the bar sits on.
+	tableFocused bool
+	tableCursor  int
 	// refreshedAt is when the graph now on screen was produced. It stays zero
 	// in deterministic renders so snapshots never embed a wall clock.
 	refreshedAt time.Time
@@ -209,6 +213,9 @@ type keymap struct {
 	applyFilter key.Binding
 	clearFilter key.Binding
 	matchMove   key.Binding
+	table       key.Binding
+	tableRow    key.Binding
+	tableBack   key.Binding
 }
 
 func newKeymap() keymap {
@@ -231,6 +238,9 @@ func newKeymap() keymap {
 		applyFilter: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "apply")),
 		clearFilter: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear filter")),
 		matchMove:   key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑↓", "move")),
+		table:       key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "checks")),
+		tableRow:    key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "row")),
+		tableBack:   key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "scroll")),
 	}
 }
 
@@ -247,7 +257,15 @@ func (a app) ribbonBindings() []key.Binding {
 	}
 	var bindings []key.Binding
 	if a.inspect != "" {
-		bindings = []key.Binding{k.scroll, k.back}
+		if a.tableFocused {
+			bindings = []key.Binding{k.tableRow, k.tableBack, k.back}
+		} else {
+			bindings = []key.Binding{k.scroll}
+			if a.inspectChecksCount() > 0 {
+				bindings = append(bindings, k.table)
+			}
+			bindings = append(bindings, k.back)
+		}
 	} else {
 		bindings = []key.Binding{k.move, k.inspect}
 		if a.filterQuery() != "" {
@@ -474,6 +492,18 @@ func (a app) scrollingPane() bool {
 	return a.inspect != "" || a.focus == focusDetail || a.help
 }
 
+// inspectChecksCount is how many cursor rows the latest observation's checks
+// table has for the inspected object; zero means there is no table to focus.
+func (a app) inspectChecksCount() int {
+	if a.inspect == "" {
+		return 0
+	}
+	if observation, found := a.graph.LatestObservation(a.inspect, ""); found {
+		return checksRowCount(observation.Checks)
+	}
+	return 0
+}
+
 // handleFilterKey routes keys while the filter input is focused: navigation
 // and mode keys are handled here, everything else edits the query.
 func (a app) handleFilterKey(message tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -578,6 +608,10 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 		return a, nil
 	case "esc", "escape", "backspace":
 		if a.inspect != "" {
+			if a.tableFocused {
+				a.tableFocused = false
+				return a, nil
+			}
 			a.inspect = ""
 			a.scroll = 0
 			a.snapScroll()
@@ -612,23 +646,36 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 	case "tab":
-		if a.inspect == "" {
-			if a.focus == focusTree {
-				a.focus = focusDetail
-			} else {
-				a.focus = focusTree
+		if a.inspect != "" {
+			if a.inspectChecksCount() > 0 {
+				a.tableFocused = !a.tableFocused
+				a.tableCursor = clamp(a.tableCursor, 0, a.inspectChecksCount()-1)
 			}
-			a.scroll = 0
-			a.snapScroll()
+			return a, nil
 		}
+		if a.focus == focusTree {
+			a.focus = focusDetail
+		} else {
+			a.focus = focusTree
+		}
+		a.scroll = 0
+		a.snapScroll()
 		return a, nil
 	case "up", "k":
+		if a.inspect != "" && a.tableFocused {
+			a.tableCursor = clamp(a.tableCursor-1, 0, a.inspectChecksCount()-1)
+			return a, nil
+		}
 		if a.scrollingPane() {
 			return a, a.animateScrollTo(a.scroll - 1)
 		}
 		a.moveSelection(-1)
 		return a, nil
 	case "down", "j":
+		if a.inspect != "" && a.tableFocused {
+			a.tableCursor = clamp(a.tableCursor+1, 0, a.inspectChecksCount()-1)
+			return a, nil
+		}
 		if a.scrollingPane() {
 			return a, a.animateScrollTo(a.scroll + 1)
 		}
@@ -667,6 +714,8 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 	case "enter":
 		if a.selected != "" {
 			a.inspect = a.selected
+			a.tableFocused = false
+			a.tableCursor = 0
 			return a, a.beginEntrance()
 		}
 		return a, nil
@@ -679,6 +728,8 @@ func (a app) handleKey(key string) (tea.Model, tea.Cmd) {
 		}
 		if a.selected != "" {
 			a.inspect = a.selected
+			a.tableFocused = false
+			a.tableCursor = 0
 			return a, a.beginEntrance()
 		}
 		return a, nil

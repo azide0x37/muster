@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode"
 
+	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
 
@@ -1042,14 +1043,7 @@ func (a app) inspectLines(id model.ID, width int, s styles) []string {
 
 	if len(component.Metadata) > 0 {
 		w.section("Metadata")
-		keys := make([]string, 0, len(component.Metadata))
-		for key := range component.Metadata {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			w.keyValue(key, component.Metadata[key])
-		}
+		w.raw(metadataTableLines(component.Metadata, width, s))
 	}
 
 	if len(component.Actions) > 0 {
@@ -1077,14 +1071,21 @@ func (a app) inspectLines(id model.ID, width int, s styles) []string {
 	if len(observations) == 0 {
 		w.text("No recorded observations.", s.faint)
 	} else {
-		for _, observation := range observations {
+		for index, observation := range observations {
+			// healthObject already shows the observation summary through its
+			// derived health; printing it again would duplicate the line.
 			w.healthObject(strings.ToUpper(string(observation.Kind))+" · "+observation.ObservedAt.Format(time.RFC3339), observation.DerivedHealth())
-			if observation.Summary != "" {
-				w.text(observation.Summary, s.body)
-			}
 			w.keyValue("Duration", fmt.Sprintf("%d ms", observation.DurationMS))
-			for _, check := range observation.Checks {
-				w.check(check)
+			if len(observation.Checks) > 0 {
+				// The cursor lives on the latest observation's table; tab
+				// moves focus into it and j/k walk the rows.
+				cursor := -1
+				if index == 0 && a.tableFocused {
+					cursor = a.tableCursor
+				}
+				w.blank()
+				w.raw(checksTableLines(observation.Checks, width, cursor, s))
+				w.blank()
 			}
 			for _, artifact := range observation.Artifacts {
 				value := artifact.URI
@@ -1735,31 +1736,153 @@ func (w *lineWriter) healthObject(label string, health model.Health) {
 	}
 }
 
-func (w *lineWriter) check(check model.Check) {
-	glyph, word, style := "?", "UNKNOWN", w.style.unknown
-	switch check.Status {
+func checkPresentation(status model.CheckStatus, s styles) (string, string, lipgloss.Style) {
+	switch status {
 	case model.CheckPass:
-		glyph, word, style = "●", "PASS", w.style.good
+		return "●", "PASS", s.good
 	case model.CheckWarn:
-		glyph, word, style = "◐", "WARN", w.style.warn
+		return "◐", "WARN", s.warn
 	case model.CheckFail:
-		glyph, word, style = "×", "FAIL", w.style.bad
+		return "×", "FAIL", s.bad
+	default:
+		return "?", "UNKNOWN", s.unknown
 	}
+}
+
+func (w *lineWriter) check(check model.Check) {
+	glyph, word, style := checkPresentation(check.Status, w.style)
 	line := glyph + " " + word + " · " + check.ID
 	if check.Summary != "" {
 		line += " — " + check.Summary
 	}
 	w.text(line, style)
 	if len(check.Evidence) > 0 {
-		keys := make([]string, 0, len(check.Evidence))
-		for key := range check.Evidence {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
+		for _, key := range sortedKeys(check.Evidence) {
 			w.keyValue("  "+key, check.Evidence[key])
 		}
 	}
+}
+
+func (w *lineWriter) raw(lines []string) {
+	w.lines = append(w.lines, lines...)
+}
+
+func sortedKeys(metadata model.Metadata) []string {
+	keys := make([]string, 0, len(metadata))
+	for key := range metadata {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// tableStyles keeps bubbles/table quiet in the console's voice: faint caps
+// headers, plain cells, and no selected-row styling — the cursor is drawn as
+// the same ▌ bar the tree uses, in a dedicated first column.
+func tableStyles(s styles) table.Styles {
+	cell := lipgloss.NewStyle().Padding(0, 1)
+	if s.noColor {
+		return table.Styles{Header: cell, Cell: cell, Selected: lipgloss.NewStyle()}
+	}
+	return table.Styles{
+		Header:   s.faint.Padding(0, 1),
+		Cell:     cell,
+		Selected: lipgloss.NewStyle(),
+	}
+}
+
+// checksRowCount is how many cursor rows an observation's checks occupy:
+// one per check plus one per evidence line.
+func checksRowCount(checks []model.Check) int {
+	count := 0
+	for _, check := range checks {
+		count++
+		count += len(check.Evidence)
+	}
+	return count
+}
+
+// checksTableLines renders checks as an aligned bubbles/table. cursor < 0
+// means the table is not focused and no bar is drawn.
+func checksTableLines(checks []model.Check, width, cursor int, s styles) []string {
+	if len(checks) == 0 {
+		return nil
+	}
+	checkWidth := len("CHECK")
+	for _, check := range checks {
+		checkWidth = max(checkWidth, len(string(check.ID)))
+	}
+	checkWidth = min(checkWidth, 24)
+	statusWidth := 9
+	evidenceWidth := max(8, width-2-statusWidth-checkWidth-8)
+	rows := make([]table.Row, 0, checksRowCount(checks))
+	index := 0
+	appendRow := func(status, check, evidence string) {
+		bar := " "
+		if index == cursor {
+			bar = s.selectedBar.Render("▌")
+		}
+		rows = append(rows, table.Row{bar, status, check, evidence})
+		index++
+	}
+	for _, check := range checks {
+		glyph, word, style := checkPresentation(check.Status, s)
+		appendRow(style.Render(glyph+" "+word), string(check.ID), check.Summary)
+		for _, key := range sortedKeys(check.Evidence) {
+			appendRow("", "", s.muted.Render(key+": "+check.Evidence[key]))
+		}
+	}
+	columns := []table.Column{
+		{Title: "", Width: 1},
+		{Title: "STATUS", Width: statusWidth},
+		{Title: "CHECK", Width: checkWidth},
+		{Title: "EVIDENCE", Width: evidenceWidth},
+	}
+	tbl := newStaticTable(columns, rows, s)
+	if cursor >= 0 {
+		tbl.SetCursor(cursor)
+	}
+	return strings.Split(tbl.View(), "\n")
+}
+
+// newStaticTable sizes a bubbles table to show every row: the pane's
+// viewport does the scrolling, not the table.
+func newStaticTable(columns []table.Column, rows []table.Row, s styles) table.Model {
+	width := 0
+	for _, column := range columns {
+		width += column.Width + 2
+	}
+	tbl := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithWidth(width),
+		table.WithHeight(len(rows)+1),
+	)
+	tbl.SetStyles(tableStyles(s))
+	return tbl
+}
+
+// metadataTableLines renders metadata as a static KEY/VALUE table.
+func metadataTableLines(metadata model.Metadata, width int, s styles) []string {
+	if len(metadata) == 0 {
+		return nil
+	}
+	keys := sortedKeys(metadata)
+	keyWidth := len("KEY")
+	for _, key := range keys {
+		keyWidth = max(keyWidth, len(key))
+	}
+	keyWidth = min(keyWidth, 20)
+	valueWidth := max(8, width-keyWidth-6)
+	rows := make([]table.Row, 0, len(keys))
+	for _, key := range keys {
+		rows = append(rows, table.Row{key, metadata[key]})
+	}
+	columns := []table.Column{
+		{Title: "KEY", Width: keyWidth},
+		{Title: "VALUE", Width: valueWidth},
+	}
+	return strings.Split(newStaticTable(columns, rows, s).View(), "\n")
 }
 
 func wrapText(text string, width int) []string {

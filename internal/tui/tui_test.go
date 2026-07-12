@@ -94,14 +94,54 @@ func TestRenderInspectorShowsCompleteGenericObject(t *testing.T) {
 		"DEPENDENCY EXPLANATION",
 		"Needs Archive Mount via Device-triggered Conveyor → Archive Mount",
 		"METADATA",
-		"pattern: T2R4.device-triggered-conveyor",
+		"T2R4.device-triggered-conveyor",
 		"ACTIONS",
 		"[d] Run doctor · doctor.run",
 		"OBSERVATIONS",
 		"DOCTOR · 2026-07-10T12:30:00Z",
-		"● PASS · queue",
+		"STATUS",
+		"CHECK",
+		"EVIDENCE",
+		"● PASS",
+		"hot queue writable",
+		"path: /mnt/archive",
 		"Artifact: /run/muster/media-gateway/doctor.json",
 	)
+}
+
+func TestInspectChecksTableFocusAndCursor(t *testing.T) {
+	a := newApp(fixtureGraph(t), Options{Hostname: "shed-pi-01", NoColor: true})
+	a.width, a.height = 110, 80
+	a.selected = "component:pattern.conveyor"
+	a.inspect = a.selected
+
+	if count := a.inspectChecksCount(); count != 3 {
+		t.Fatalf("checks row count = %d, want 3 (two checks plus one evidence row)", count)
+	}
+	updatedModel, _ := a.handleKey("tab")
+	a = updatedModel.(app)
+	if !a.tableFocused {
+		t.Fatal("tab did not focus the checks table")
+	}
+	updatedModel, _ = a.handleKey("j")
+	a = updatedModel.(app)
+	if a.tableCursor != 1 || a.scroll != 0 {
+		t.Fatalf("j moved cursor to %d (scroll %d), want row 1 with no pane scroll", a.tableCursor, a.scroll)
+	}
+	cursorRow := ""
+	for _, line := range strings.Split(a.render(), "\n") {
+		if strings.Contains(line, "▌") {
+			cursorRow = line
+		}
+	}
+	if !strings.Contains(cursorRow, "◐ WARN") || !strings.Contains(cursorRow, "archive") {
+		t.Fatalf("cursor bar is not on the archive check row: %q", cursorRow)
+	}
+	updatedModel, _ = a.handleKey("esc")
+	a = updatedModel.(app)
+	if a.tableFocused || a.inspect == "" {
+		t.Fatal("esc should leave the table but stay in the inspect view")
+	}
 }
 
 func TestSidebarRendersCardsAndStrips(t *testing.T) {
