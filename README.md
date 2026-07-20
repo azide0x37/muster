@@ -230,6 +230,9 @@ Brand assets live in `assets/brand/`:
 - `muster-logo-wordmark.png`: primary README/header asset.
 - `muster-logo.png`: square icon mark.
 - `muster-wordmark.png`: horizontal wordmark.
+- `og-card.html`: self-contained 1200×630 social share card. `docs/og.png` is a
+  headless-Chromium render of it, referenced by the site's Open Graph and
+  Twitter meta tags; regeneration instructions live in the file header.
 
 ## Use Muster In A Fresh Repo
 
