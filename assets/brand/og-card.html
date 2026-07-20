@@ -66,7 +66,7 @@ body {
 }
 /* side rulers */
 .ruler {
-  position: absolute; top: 0; bottom: 46px; width: 14px; z-index: 5; opacity: .55;
+  position: absolute; top: 0; bottom: 64px; width: 14px; z-index: 5; opacity: .55;
   background-image: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 24px);
 }
 .ruler.left { left: 0; border-right: 1px solid var(--line-soft); }
@@ -74,33 +74,33 @@ body {
 
 /* section index, top right */
 .sect-idx {
-  position: absolute; top: 34px; right: 46px; z-index: 6;
-  font-family: var(--mono); font-size: 12px; letter-spacing: .28em; color: var(--faint);
+  position: absolute; top: 28px; right: 44px; z-index: 6;
+  font-family: var(--mono); font-size: 26px; letter-spacing: .24em; color: var(--faint);
 }
 
 /* ---------- text block ---------- */
-.stack { position: absolute; left: 72px; top: 138px; z-index: 10; }
+.stack { position: absolute; left: 72px; top: 106px; z-index: 10; }
 .kicker {
-  display: inline-flex; align-items: center; gap: 11px;
-  font-family: var(--mono); font-size: 13px; letter-spacing: .32em; text-transform: uppercase;
-  color: var(--accent); border: 1px solid var(--line); padding: 9px 16px;
+  display: inline-flex; align-items: center; gap: 14px;
+  font-family: var(--mono); font-size: 26px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid var(--line); padding: 11px 20px;
   background: color-mix(in oklab, var(--bg) 72%, transparent);
 }
-.led { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 9px var(--good); }
+.led { width: 12px; height: 12px; border-radius: 50%; background: var(--good); box-shadow: 0 0 10px var(--good); flex: none; }
 h1 {
   font-family: var(--stencil); font-weight: 400;
   font-size: 172px; line-height: .86; letter-spacing: .01em; text-transform: uppercase;
-  margin: 24px 0 0 -4px; color: var(--fg);
+  margin: 26px 0 0 -4px; color: var(--fg);
 }
 .tag {
-  font-family: var(--mono); font-size: 28px; letter-spacing: .02em;
-  margin-top: 26px; color: var(--fg);
+  font-family: var(--mono); font-size: 31px; letter-spacing: .01em;
+  margin-top: 28px; color: var(--fg);
 }
 .tag b { color: var(--accent); font-weight: 600; }
-.sub { margin-top: 15px; font-size: 20px; color: var(--muted); letter-spacing: .01em; }
+.sub { margin-top: 14px; font-size: 27px; color: var(--muted); letter-spacing: .01em; }
 
 /* ---------- insignia ---------- */
-.insignia { position: absolute; right: 84px; top: 132px; z-index: 8; width: 290px; height: 290px; }
+.insignia { position: absolute; right: 84px; top: 122px; z-index: 8; width: 290px; height: 290px; }
 .insignia .glow {
   position: absolute; inset: -70px;
   background: radial-gradient(closest-side, oklch(0.76 0.155 65 / 0.16), transparent 72%);
@@ -117,17 +117,16 @@ h1 {
 /* ---------- bottom status bar ---------- */
 .chrome-bottom {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 15;
-  display: flex; align-items: center; gap: 22px;
-  height: 46px; padding: 0 46px;
+  display: flex; align-items: center; gap: 24px;
+  height: 64px; padding: 0 46px;
   background: color-mix(in oklab, var(--bg) 86%, transparent);
   border-top: 1px solid var(--line-soft);
-  font-family: var(--mono); font-size: 12.5px; letter-spacing: .12em; color: var(--muted);
+  font-family: var(--mono); font-size: 26px; letter-spacing: .06em; color: var(--muted);
   text-transform: uppercase;
 }
-.chrome-bottom .unit { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-.chrome-bottom .unit .led { width: 7px; height: 7px; }
+.chrome-bottom .unit { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.chrome-bottom .unit .led { width: 10px; height: 10px; }
 .chrome-bottom .spacer { flex: 1; }
-.chrome-bottom .dim { color: var(--faint); }
 .chrome-bottom .url { color: var(--fg); }
 </style>
 </head>
@@ -156,11 +155,8 @@ h1 {
 
   <div class="chrome-bottom">
     <span class="unit"><span class="led"></span>All units active</span>
-    <span class="unit dim">systemd-native · idempotent installs · sha256 + rollback · doctor.sh</span>
     <span class="spacer"></span>
     <span class="unit url">github.com/azide0x37/muster</span>
   </div>
-
-  
 </body>
 </html>
